@@ -24,6 +24,50 @@ public sealed class WindowsPlatform : IPlatform
     private string? _renderId;
     private string? _captureId;
 
+    // Zwischenspeicher der Zustände: GetStates() greift nie auf die Audio-Objekte zu (COM-Aufrufe aus der Oberfläche
+    // stauten sich sonst hinter Aktionen und liessen Stumm und Anzeige hinterherhinken)
+    private readonly Dictionary<string, string> _cache = [];
+    private readonly object _cacheGate = new();
+
+    /// <summary>Meldet eine Zustandsänderung an alle Empfänger einzeln: eine Ausnahme in einem stoppt die anderen nicht.</summary>
+    private void Raise(string id, string value)
+    {
+        var handlers = StateChanged;
+        if (handlers == null) return;
+        foreach (var h in handlers.GetInvocationList().Cast<Action<string, string>>())
+        {
+            try { h(id, value); }
+            catch (Exception ex) { Log.Warn($"Zustandsmeldung '{id}': {ex.Message}"); }
+        }
+    }
+
+    private void SetCache(string id, string value)
+    {
+        lock (_cacheGate) _cache[id] = value;
+    }
+
+    /// <summary>Liest die Zustände einmal von den Audio-Objekten (nur von Attach aufgerufen, nie von der Oberfläche).</summary>
+    private void ReadCache()
+    {
+        lock (_cacheGate)
+        {
+            _cache.Clear();
+            try
+            {
+                if (_render != null)
+                {
+                    _cache["volume"] = ((int)Math.Round(_render.AudioEndpointVolume.MasterVolumeLevelScalar * 100)).ToString();
+                    _cache["mute"] = _render.AudioEndpointVolume.Mute ? "on" : "off";
+                }
+                if (_capture != null) _cache["mic_mute"] = _capture.AudioEndpointVolume.Mute ? "on" : "off";
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"Zustand lesen: {ex.Message}");
+            }
+        }
+    }
+
     public event Action<string, string>? StateChanged;
 
     public WindowsPlatform()
@@ -62,6 +106,7 @@ public sealed class WindowsPlatform : IPlatform
                 _captureId = null;
                 Log.Info($"Kein Mikrofon: {ex.Message}");
             }
+            ReadCache();
         }
     }
 
@@ -85,7 +130,7 @@ public sealed class WindowsPlatform : IPlatform
             if (r == _renderId && c == _captureId) return;
             Log.Info("Standard-Audiogerät gewechselt");
             Attach();
-            foreach (var (id, value) in GetStates()) StateChanged?.Invoke(id, value);
+            foreach (var (id, value) in GetStates()) Raise(id, value);
         }
         catch (Exception ex)
         {
@@ -95,33 +140,24 @@ public sealed class WindowsPlatform : IPlatform
 
     private void OnRenderChanged(AudioVolumeNotificationData d)
     {
-        StateChanged?.Invoke("volume", ((int)Math.Round(d.MasterVolume * 100)).ToString());
-        StateChanged?.Invoke("mute", d.Muted ? "on" : "off");
+        var volume = ((int)Math.Round(d.MasterVolume * 100)).ToString();
+        var mute = d.Muted ? "on" : "off";
+        SetCache("volume", volume);
+        SetCache("mute", mute);
+        Raise("volume", volume);
+        Raise("mute", mute);
     }
 
-    private void OnCaptureChanged(AudioVolumeNotificationData d) =>
-        StateChanged?.Invoke("mic_mute", d.Muted ? "on" : "off");
+    private void OnCaptureChanged(AudioVolumeNotificationData d)
+    {
+        var mute = d.Muted ? "on" : "off";
+        SetCache("mic_mute", mute);
+        Raise("mic_mute", mute);
+    }
 
     public IReadOnlyDictionary<string, string> GetStates()
     {
-        var states = new Dictionary<string, string>();
-        lock (_gate)
-        {
-            try
-            {
-                if (_render != null)
-                {
-                    states["volume"] = ((int)Math.Round(_render.AudioEndpointVolume.MasterVolumeLevelScalar * 100)).ToString();
-                    states["mute"] = _render.AudioEndpointVolume.Mute ? "on" : "off";
-                }
-                if (_capture != null) states["mic_mute"] = _capture.AudioEndpointVolume.Mute ? "on" : "off";
-            }
-            catch (Exception ex)
-            {
-                Log.Warn($"Zustand lesen: {ex.Message}");
-            }
-        }
-        return states;
+        lock (_cacheGate) return new Dictionary<string, string>(_cache);
     }
 
     public void AdjustVolume(int deltaPercent)

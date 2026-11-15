@@ -16,7 +16,7 @@ public sealed class AgentCore : IDisposable
         Link = link;
         Actions = actions;
         Platform.StateChanged += (id, value) => Link.SendState(id, value);
-        Link.ActionReceived += id => Run(id);
+        Link.ActionReceived += id => Task.Run(() => Run(id));   // nicht auf dem Lesethread: er muss weiter Nachrichten annehmen
         Link.ConnectionChanged += (connected, _) =>
         {
             if (!connected) return;

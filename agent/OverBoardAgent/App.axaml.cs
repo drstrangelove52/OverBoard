@@ -79,7 +79,10 @@ public partial class App : Application
 
         var version = typeof(App).Assembly.GetName().Version?.ToString(3) ?? "0.1.0";
         var link = new DeviceLink(version);
-        _core = new AgentCore(new WindowsPlatform(), link, new ActionStore());
+        // Die Audio-Objekte auf einem Hintergrundthread anlegen: sonst gehören sie zum Oberflächen-Thread, und jeder Aufruf
+        // von einem anderen Thread (Aktionen vom Gerät) müsste über dessen Nachrichtenschleife laufen
+        var platform = Task.Run(() => new WindowsPlatform()).GetAwaiter().GetResult();
+        _core = new AgentCore(platform, link, new ActionStore());
         link.ConnectionChanged += (_, _) => Dispatcher.UIThread.Post(RefreshTexts);
 
         BuildTray();

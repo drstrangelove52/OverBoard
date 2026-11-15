@@ -28,6 +28,8 @@ public sealed class PreviewOptions
     public TileModel? Selected;
     public HashSet<TileModel> On { get; } = [];          // Kacheln, die in der Vorschau "eingeschaltet" aussehen
     public bool ShowGrid = true;                          // gestrichelte Rasterzellen
+    /// <summary>Echte Zustände (Quelle → Wert, z. B. aus Home Assistant und vom PC). Null = Beispielwerte zeigen.</summary>
+    public IReadOnlyDictionary<string, string>? States;
     public Rect? Ghost;                                   // Zielposition beim Ziehen
     public bool GhostValid = true;
 }
@@ -159,7 +161,7 @@ public static class DisplayRenderer
         var pageIndex = Math.Clamp(options.Page, 0, cfg.Pages.Count - 1);
         var page = cfg.Pages[pageIndex];
         if (options.ShowGrid) AddGuides(root, page);
-        foreach (var tile in page.Tiles) AddTile(root, page, tile, th, cfg.Language, options.On.Contains(tile));
+        foreach (var tile in page.Tiles) AddTile(root, page, tile, th, cfg.Language, options.On.Contains(tile), options.States);
         if (cfg.Pages.Count > 1) AddNav(root, cfg, pageIndex, th);
 
         if (options.Selected != null && page.Tiles.Contains(options.Selected)) AddSelection(root, TileRect(page, options.Selected));
@@ -208,10 +210,20 @@ public static class DisplayRenderer
             }
     }
 
-    private static void AddTile(Canvas root, PageModel page, TileModel t, ThemeColors th, string language, bool on)
+    private static void AddTile(Canvas root, PageModel page, TileModel t, ThemeColors th, string language, bool on,
+        IReadOnlyDictionary<string, string>? states)
     {
         var rect = TileRect(page, t);
-        var showOn = on && (t.IsButton || t.EffectiveFormat == "onoff");
+        // Echter Zustand, wenn bekannt; sonst (ohne Quelle oder ohne Verbindung) Beispielwerte
+        string? liveState = null;
+        var hasLive = false;
+        if (states != null && !string.IsNullOrEmpty(t.Source))
+        {
+            hasLive = true;
+            states.TryGetValue(t.Source, out liveState);
+        }
+        var isOn = on || (hasLive && liveState == "on");
+        var showOn = isOn && (t.IsButton || t.EffectiveFormat == "onoff");
         var body = new Border
         {
             Width = rect.Width, Height = rect.Height, CornerRadius = new CornerRadius(16), IsHitTestVisible = false,
@@ -232,7 +244,7 @@ public static class DisplayRenderer
                                              : Measure("Ag", TextFont, narrow ? 14 : 20);
             if (t.Icon != null)
                 PutText(inner, MdiIcons.Glyph(t.Icon), IconFont, narrow ? 24 : 28, th.Title, s => new Point(w - Pad - s.Width, Pad));
-            var sample = Sample(t, language, showOn);
+            var sample = hasLive ? ValueFormatter.Format(t, liveState, language) : Sample(t, language, showOn);
             var size = FitFont(sample, w - 2 * Pad, h - 2 * Pad - (Math.Round(titleSize.Height) + (narrow ? 5 : 8)));
             PutText(inner, sample, TextFont, size, showOn ? th.Accent : th.Value, s => new Point(Pad, h - Pad - s.Height));
         }

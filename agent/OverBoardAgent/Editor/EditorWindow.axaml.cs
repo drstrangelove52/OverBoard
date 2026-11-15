@@ -37,6 +37,12 @@ public partial class EditorWindow : Window
     private readonly TextBlock[] _idleHead = new TextBlock[2];
     private TextBlock? _idleIntro;
 
+    // Echte Werte in der Vorschau: Home Assistant (alle 30 s geholt) und Zustände vom PC
+    private Dictionary<string, string> _haStates = [];
+    private readonly DispatcherTimer _valuesTimer = new() { Interval = TimeSpan.FromSeconds(30) };
+    // Zustände vom PC (Lautstärke, Stumm …) kommen sofort als Ereignis; mehrere in kurzer Zeit gibt eine Neuzeichnung
+    private readonly DispatcherTimer _pcRedraw = new() { Interval = TimeSpan.FromMilliseconds(120) };
+
     private readonly AgentCore? _core;
     private ConfigModel _cfg = new();
     private int _page;
@@ -91,10 +97,17 @@ public partial class EditorWindow : Window
             await SendAsync(auto: true);
         };
 
-        Opened += async (_, _) => await LoadInitialAsync();
+        _pcRedraw.Tick += (_, _) => { _pcRedraw.Stop(); Rebuild(); };
+        _core.Platform.StateChanged += OnPcStateChanged;
+        _valuesTimer.Tick += async (_, _) => await RefreshValuesAsync();
+        _valuesTimer.Start();
+        Opened += async (_, _) => { await LoadInitialAsync(); await RefreshValuesAsync(); };
         Closed += (_, _) =>
         {
             _sendTimer.Stop();
+            _valuesTimer.Stop();
+            _pcRedraw.Stop();
+            _core.Platform.StateChanged -= OnPcStateChanged;
             _core.Actions.Changed -= OnActionsChanged;
             _core.Link.ConnectionChanged -= OnConnectionChanged;
             ActionsPage.Detach();
@@ -134,6 +147,7 @@ public partial class EditorWindow : Window
         RedoButton.Content = T("↷ Wiederholen", "↷ Redo");
         SendButton.Content = T("Jetzt senden", "Send now");
         LiveBox.Content = T("Live auf das Gerät", "Live to device");
+        RealValuesBox.Content = T("Echte Werte anzeigen", "Show real values");
         LoadButton.Content = T("Vom Gerät laden", "Load from device");
         OpenFileButton.Content = T("Laden …", "Load …");
         SaveFileButton.Content = T("Speichern unter …", "Save as …");
@@ -294,6 +308,7 @@ public partial class EditorWindow : Window
         UndoButton.Click += (_, _) => DoUndo();
         RedoButton.Click += (_, _) => DoRedo();
         SendButton.Click += async (_, _) => await SendAsync(auto: false);
+        RealValuesBox.IsCheckedChanged += async (_, _) => { _realValuesOn = RealValuesBox.IsChecked == true; await RefreshValuesAsync(); Rebuild(); };
         LiveBox.IsCheckedChanged += (_, _) => { if (LiveBox.IsChecked == true && _dirty) ScheduleSend(); };
         LoadButton.Click += async (_, _) => await LoadFromDeviceAsync();
         OpenFileButton.Click += async (_, _) => await OpenFileAsync();
@@ -421,6 +436,35 @@ public partial class EditorWindow : Window
     private sealed record ActionChoice(string Id, string Label)
     {
         public override string ToString() => Label;
+    }
+
+    // ---- Echte Werte ------------------------------------------------------------------------------
+
+    /// <summary>Zustände für die Vorschau: Home Assistant und PC. Null, wenn "Echte Werte anzeigen" aus ist oder nichts bekannt ist.</summary>
+    private IReadOnlyDictionary<string, string>? CurrentStates()
+    {
+        if (RealValuesBox.IsChecked != true || _core == null) return null;
+        var states = new Dictionary<string, string>(_haStates);
+        foreach (var (id, value) in _core.Platform.GetStates()) states["pc:" + id] = value;
+        return states;
+    }
+
+    // Wird auf einem Audio-Thread aufgerufen: nie auf Oberflächen-Elemente zugreifen (das wirft dort eine Ausnahme)
+    private volatile bool _realValuesOn = true;
+
+    private void OnPcStateChanged(string id, string value)
+    {
+        if (!_realValuesOn) return;
+        Dispatcher.UIThread.Post(() => { if (!_pcRedraw.IsEnabled) _pcRedraw.Start(); });
+    }
+
+    private async Task RefreshValuesAsync()
+    {
+        if (RealValuesBox.IsChecked != true || _core == null) return;
+        if (string.IsNullOrWhiteSpace(Settings.HaUrl) || string.IsNullOrWhiteSpace(Settings.HaToken)) { Rebuild(); return; }
+        var (entities, _) = await HaClient.FetchAsync(Settings.HaUrl, Settings.HaToken);
+        if (entities != null) _haStates = entities.ToDictionary(e => e.Id, e => e.State);
+        Rebuild();
     }
 
     // ---- Navigation ----------------------------------------------------------------------------
@@ -568,7 +612,7 @@ public partial class EditorWindow : Window
     private void Rebuild()
     {
         if (_cfg.Pages.Count == 0) return;
-        var options = new PreviewOptions { Page = _page, Selected = _sel, Ghost = _ghost, GhostValid = _ghostValid };
+        var options = new PreviewOptions { Page = _page, Selected = _sel, Ghost = _ghost, GhostValid = _ghostValid, States = CurrentStates() };
         foreach (var t in _on) options.On.Add(t);
         Host.Content = DisplayRenderer.Build(_cfg, options);
     }

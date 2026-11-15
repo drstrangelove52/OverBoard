@@ -9,6 +9,7 @@
 #include "board.h"
 #include "config.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "esp_lvgl_port.h"
 #include "esp_random.h"
 #include "fonts.h"
@@ -911,7 +912,10 @@ void ui_reload(void)
 void ui_set_entity(const char *entity_id, const char *state)
 {
     ESP_LOGI(TAG, "HA: %s = %.40s", entity_id, state);
-    if (!lvgl_port_lock(200)) return;
+    if (!lvgl_port_lock(200)) {
+        ESP_LOGW(TAG, "LVGL-Sperre nicht erhalten, Wert verworfen: %s", entity_id);
+        return;
+    }
     cache_put(entity_id, state);
     for (int i = 0; i < s_n_tiles; i++) {
         if (!strcmp(s_tiles[i].cfg->entity, entity_id)) apply_state(&s_tiles[i], state);
