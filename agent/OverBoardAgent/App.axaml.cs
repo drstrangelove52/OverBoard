@@ -90,8 +90,23 @@ public partial class App : Application
         _ = Task.Run(UpdateLoopAsync);
         link.Start();
         // Mit "--settings" gestartet öffnet sich gleich das Einstellungsfenster (praktisch zum Testen)
-        // Beim ersten Start (noch nichts eingerichtet) oder mit "--settings" öffnen sich gleich die Einstellungen
-        if (Settings.IsEmpty || Environment.GetCommandLineArgs().Contains("--settings")) Dispatcher.UIThread.Post(() => OpenMain());
+        // Das Hauptfenster öffnet sich beim Start, ausser beim automatischen Start mit Windows ("--tray"): dann nur das Tray-Symbol
+        if (!Environment.GetCommandLineArgs().Contains("--tray")) Dispatcher.UIThread.Post(() => OpenMain());
+
+        // Ein zweiter Start des Programms (z. B. über das Startmenü-Symbol) ruft das Hauptfenster
+        var showEvent = Program.ShowEvent;
+        if (showEvent != null)
+            new Thread(() =>
+            {
+                while (true)
+                {
+                    try { showEvent.WaitOne(); } catch { return; }
+                    Dispatcher.UIThread.Post(() => OpenMain());
+                }
+            }) { IsBackground = true, Name = "OverBoard-Show" }.Start();
+
+        // Eintrag für den Autostart auffrischen (Pfad nach einem Update, Option "--tray")
+        try { if (platform.IsAutostartEnabled()) platform.SetAutostart(true); } catch (Exception ex) { Log.Warn($"Autostart: {ex.Message}"); }
         if (Environment.GetCommandLineArgs().Contains("--editor"))
             Dispatcher.UIThread.Post(() => OpenMain());
 

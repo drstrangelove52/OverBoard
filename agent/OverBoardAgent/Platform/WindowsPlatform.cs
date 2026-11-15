@@ -239,7 +239,7 @@ public sealed class WindowsPlatform : IPlatform
         if (enabled)
         {
             var exe = Environment.ProcessPath ?? throw new InvalidOperationException("Programmpfad unbekannt");
-            key.SetValue(RunValue, "\"" + exe + "\"");
+            key.SetValue(RunValue, "\"" + exe + "\" --tray");
         }
         else
         {

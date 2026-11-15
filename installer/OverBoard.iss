@@ -23,6 +23,9 @@ UninstallDisplayIcon={app}\OverBoardAgent.exe
 ArchitecturesInstallIn64BitMode=x64compatible
 DisableProgramGroupPage=yes
 
+[Tasks]
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
+
 [Languages]
 Name: "german"; MessagesFile: "compiler:Languages\German.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -32,6 +35,7 @@ Source: "..\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs cr
 
 [Icons]
 Name: "{autoprograms}\OverBoard"; Filename: "{app}\OverBoardAgent.exe"
+Name: "{autodesktop}\OverBoard"; Filename: "{app}\OverBoardAgent.exe"; Tasks: desktopicon
 
 [Run]
 ; Normale Installation: Auswahlfeld "OverBoard starten" am Ende
