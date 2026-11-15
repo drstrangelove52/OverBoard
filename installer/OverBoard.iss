@@ -34,4 +34,7 @@ Source: "..\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs cr
 Name: "{autoprograms}\OverBoard"; Filename: "{app}\OverBoardAgent.exe"
 
 [Run]
+; Normale Installation: Auswahlfeld "OverBoard starten" am Ende
 Filename: "{app}\OverBoardAgent.exe"; Description: "{cm:LaunchProgram,OverBoard}"; Flags: nowait postinstall skipifsilent
+; Stille Installation (Update aus dem Programm): das Programm hat sich dafür beendet, also von hier wieder starten
+Filename: "{app}\OverBoardAgent.exe"; Flags: nowait; Check: WizardSilent
