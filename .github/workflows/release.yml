@@ -1,0 +1,80 @@
+# Release-Ablauf: Ein Tag "v1.2.3" baut Firmware und Programm, packt die Firmware in den Installer
+# und veröffentlicht alles als GitHub-Release (mit Prüfsummen). Das Programm holt sich Updates von dort.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    container: espressif/idf:v5.4.4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Version aus dem Tag
+        run: echo "VER=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+      - name: Firmware bauen
+        working-directory: firmware/overboard
+        shell: bash
+        run: |
+          . $IDF_PATH/export.sh
+          touch sdkconfig.secrets            # leer: das fertige Programm enthält keine Zugangsdaten
+          idf.py set-target esp32p4
+          idf.py -DPROJECT_VER="$VER" build
+      - name: Paket zusammenstellen
+        working-directory: firmware/overboard/build
+        shell: bash
+        run: |
+          mkdir -p ../../../firmware-package/bootloader ../../../firmware-package/partition_table
+          cp flasher_args.json overboard.bin ../../../firmware-package/
+          cp bootloader/bootloader.bin ../../../firmware-package/bootloader/
+          cp partition_table/partition-table.bin ../../../firmware-package/partition_table/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-package
+          path: firmware-package
+
+  agent:
+    needs: firmware
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version aus dem Tag
+        shell: pwsh
+        run: |
+          "VER=$($env:GITHUB_REF_NAME.TrimStart('v'))" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - uses: actions/download-artifact@v4
+        with:
+          name: firmware-package
+          path: agent/OverBoardAgent/firmware
+      - name: Programm veröffentlichen
+        shell: pwsh
+        run: |
+          dotnet publish agent/OverBoardAgent -c Release -r win-x64 --self-contained true -p:Version=$env:VER -o publish
+      - name: Installer bauen
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DAppVersion=$env:VER" installer\OverBoard.iss
+      - name: Prüfsummen
+        shell: pwsh
+        working-directory: out
+        run: |
+          $f = Get-ChildItem OverBoard-Setup-*.exe
+          $h = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.ToLower()
+          "$h  $($f.Name)" | Out-File -FilePath SHA256SUMS.txt -Encoding ascii
+      - name: Release veröffentlichen
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME out/OverBoard-Setup-*.exe out/SHA256SUMS.txt --title $env:GITHUB_REF_NAME --generate-notes

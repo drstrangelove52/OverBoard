@@ -1,0 +1,12 @@
+# Build-Artefakte und erzeugte Konfiguration
+build/
+managed_components/
+sdkconfig
+sdkconfig.old
+
+# Zugangsdaten (nie einchecken!)
+sdkconfig.secrets
+
+# Logs
+*.log
+serial_log*.txt

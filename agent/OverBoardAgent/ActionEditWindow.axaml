@@ -1,0 +1,45 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="OverBoardAgent.ActionEditWindow"
+        Width="560" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Icon="/Assets/tray.png">
+    <StackPanel Margin="24" Spacing="14">
+        <StackPanel Spacing="4">
+            <TextBlock x:Name="NameLabel" />
+            <TextBox x:Name="NameBox" />
+        </StackPanel>
+        <StackPanel Spacing="4">
+            <TextBlock x:Name="IdLabel" />
+            <TextBox x:Name="IdBox" />
+        </StackPanel>
+        <StackPanel Spacing="4">
+            <TextBlock x:Name="KindLabel" />
+            <ComboBox x:Name="KindBox" HorizontalAlignment="Stretch" />
+        </StackPanel>
+        <StackPanel x:Name="OpenPanel" Spacing="14">
+            <StackPanel Spacing="4">
+                <TextBlock x:Name="TargetLabel" />
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBox x:Name="TargetBox" />
+                    <Button x:Name="BrowseButton" Grid.Column="1" Margin="8,0,0,0" />
+                </Grid>
+                <TextBlock x:Name="TargetHint" FontSize="12" Opacity="0.65" TextWrapping="Wrap" />
+            </StackPanel>
+            <StackPanel Spacing="4">
+                <TextBlock x:Name="ArgsLabel" />
+                <TextBox x:Name="ArgsBox" />
+            </StackPanel>
+        </StackPanel>
+        <StackPanel x:Name="KeysPanel" Spacing="4">
+            <TextBlock x:Name="KeysLabel" />
+            <TextBox x:Name="KeysBox" />
+            <TextBlock x:Name="KeysHint" FontSize="12" Opacity="0.65" TextWrapping="Wrap" />
+        </StackPanel>
+        <TextBlock x:Name="ErrorText" Foreground="#E5484D" TextWrapping="Wrap" IsVisible="False" />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+            <Button x:Name="CancelButton" />
+            <Button x:Name="SaveButton" Classes="accent" />
+        </StackPanel>
+    </StackPanel>
+</Window>

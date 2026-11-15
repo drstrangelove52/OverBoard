@@ -1,0 +1,10 @@
+bin/
+obj/
+dist/
+*.user
+.vs/
+
+# erzeugte Ausgaben der Hilfsskripte
+tools/daten-uebernehmen-ergebnis.txt
+tools/echtes-protokoll.txt
+build-dev/

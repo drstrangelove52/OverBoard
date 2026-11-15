@@ -1,0 +1,17 @@
+menu "OverBoard"
+    config OB_HA_WS_URI
+        string "HA-WebSocket-URI"
+        default ""
+    config OB_HA_TOKEN
+        string "HA Langzeit-Token"
+        default ""
+    config OB_MQTT_URI
+        string "MQTT-Broker-URI"
+        default ""
+    config OB_MQTT_USER
+        string "MQTT-User"
+        default ""
+    config OB_MQTT_PASSWORD
+        string "MQTT-Passwort"
+        default ""
+endmenu

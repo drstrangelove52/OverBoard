@@ -1,0 +1,249 @@
+{
+  "v": 1,
+  "language": "de",
+  "theme": "dark",
+  "brightness": 80,
+  "hold_ms": 600,
+  "idle": {
+    "timeout_s": 60,
+    "brightness": 8,
+    "move_s": 60
+  },
+  "pages": [
+    {
+      "title": {
+        "de": "Haus",
+        "en": "Home"
+      },
+      "icon": "mdi:home",
+      "rows": 4,
+      "tiles": [
+        {
+          "type": "value",
+          "x": 0,
+          "y": 0,
+          "w": 2,
+          "h": 2,
+          "source": "sensor.inverter_active_power",
+          "title": "Solar",
+          "icon": "mdi:solar-power",
+          "format": "power"
+        },
+        {
+          "type": "value",
+          "x": 2,
+          "y": 0,
+          "w": 2,
+          "h": 1,
+          "source": "sensor.inverter_daily_yield",
+          "title": {
+            "de": "Tagesertrag",
+            "en": "Daily yield"
+          },
+          "icon": "mdi:white-balance-sunny",
+          "format": "kwh"
+        },
+        {
+          "type": "value",
+          "x": 4,
+          "y": 0,
+          "w": 2,
+          "h": 1,
+          "source": "sensor.power_consumption_house",
+          "title": {
+            "de": "Haus",
+            "en": "House"
+          },
+          "icon": "mdi:home-lightning-bolt",
+          "format": "power"
+        },
+        {
+          "type": "value",
+          "x": 6,
+          "y": 0,
+          "w": 2,
+          "h": 1,
+          "source": "sensor.heat_pump_power_consumption",
+          "title": {
+            "de": "Wärmepumpe",
+            "en": "Heat pump"
+          },
+          "icon": "mdi:heat-pump",
+          "format": "power",
+          "max": 6000
+        },
+        {
+          "type": "value",
+          "x": 2,
+          "y": 1,
+          "w": 2,
+          "h": 1,
+          "source": "sensor.geschirrspuler_betriebszustand",
+          "title": {
+            "de": "Geschirrspüler",
+            "en": "Dishwasher"
+          },
+          "icon": "mdi:dishwasher",
+          "format": "status"
+        },
+        {
+          "type": "button",
+          "x": 4,
+          "y": 1,
+          "w": 1,
+          "h": 1,
+          "source": "light.burotisch",
+          "title": {
+            "de": "Bürotisch",
+            "en": "Desk"
+          },
+          "icon": "mdi:lightbulb",
+          "format": "onoff",
+          "trigger": "tap"
+        },
+        {
+          "type": "button",
+          "x": 5,
+          "y": 1,
+          "w": 1,
+          "h": 1,
+          "source": "switch.bambu_lab_x1c",
+          "title": "X1C",
+          "icon": "mdi:printer-3d",
+          "format": "onoff",
+          "trigger": "hold"
+        },
+        {
+          "type": "value",
+          "x": 0,
+          "y": 2,
+          "w": 2,
+          "h": 1,
+          "source": "pc:volume",
+          "title": {
+            "de": "PC Lautstärke",
+            "en": "PC volume"
+          },
+          "icon": "mdi:volume-high",
+          "format": "percent"
+        },
+        {
+          "type": "button",
+          "x": 2,
+          "y": 2,
+          "w": 1,
+          "h": 1,
+          "title": {
+            "de": "Leiser",
+            "en": "Quieter"
+          },
+          "icon": "mdi:volume-minus",
+          "format": "onoff",
+          "trigger": "tap",
+          "action": "pc:volume.down"
+        },
+        {
+          "type": "button",
+          "x": 3,
+          "y": 2,
+          "w": 1,
+          "h": 1,
+          "title": {
+            "de": "Lauter",
+            "en": "Louder"
+          },
+          "icon": "mdi:volume-plus",
+          "format": "onoff",
+          "trigger": "tap",
+          "action": "pc:volume.up"
+        },
+        {
+          "type": "button",
+          "x": 4,
+          "y": 2,
+          "w": 1,
+          "h": 1,
+          "source": "pc:mute",
+          "title": {
+            "de": "Stumm",
+            "en": "Mute"
+          },
+          "icon": "mdi:volume-off",
+          "format": "onoff",
+          "trigger": "tap",
+          "action": "pc:mute.toggle"
+        },
+        {
+          "type": "button",
+          "x": 5,
+          "y": 2,
+          "w": 1,
+          "h": 1,
+          "source": "pc:mic_mute",
+          "title": {
+            "de": "Mikro",
+            "en": "Mic"
+          },
+          "icon": "mdi:microphone-off",
+          "format": "onoff",
+          "trigger": "tap",
+          "action": "pc:mic.toggle"
+        },
+        {
+          "type": "button",
+          "x": 6,
+          "y": 2,
+          "w": 1,
+          "h": 1,
+          "title": {
+            "de": "Sperren",
+            "en": "Lock"
+          },
+          "icon": "mdi:lock",
+          "format": "onoff",
+          "trigger": "tap",
+          "action": "pc:lock"
+        },
+        {
+          "type": "button",
+          "x": 7,
+          "y": 2,
+          "w": 1,
+          "h": 1,
+          "title": {
+            "de": "Rechner",
+            "en": "Calculator"
+          },
+          "icon": "mdi:calculator",
+          "format": "onoff",
+          "trigger": "tap",
+          "action": "pc:calculator"
+        },
+        {
+          "type": "button",
+          "x": 0,
+          "y": 3,
+          "w": 1,
+          "h": 1,
+          "title": "Screenshot",
+          "icon": "mdi:monitor-screenshot",
+          "format": "onoff",
+          "trigger": "tap",
+          "action": "pc:screenshot"
+        },
+        {
+          "type": "button",
+          "x": 1,
+          "y": 3,
+          "w": 1,
+          "h": 1,
+          "title": "Notepad",
+          "icon": "mdi:notebook",
+          "format": "onoff",
+          "trigger": "tap",
+          "action": "pc:notepad"
+        }
+      ]
+    }
+  ]
+}

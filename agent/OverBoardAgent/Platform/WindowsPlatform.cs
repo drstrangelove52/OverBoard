@@ -1,0 +1,220 @@
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using NAudio.CoreAudioApi;
+using Microsoft.Win32;
+using NAudio.CoreAudioApi.Interfaces;
+using OverBoardAgent.Core;
+
+namespace OverBoardAgent.Platform;
+
+/// <summary>Windows: Lautstärke und Stumm über Core Audio (NAudio), PC sperren über user32.</summary>
+public sealed class WindowsPlatform : IPlatform
+{
+    [DllImport("user32.dll")]
+    private static extern bool LockWorkStation();
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    private readonly MMDeviceEnumerator _enumerator = new();
+    private readonly object _gate = new();
+    private readonly Timer _watch;
+    private MMDevice? _render;
+    private MMDevice? _capture;
+    private string? _renderId;
+    private string? _captureId;
+
+    public event Action<string, string>? StateChanged;
+
+    public WindowsPlatform()
+    {
+        Attach();
+        // Standardgeräte können wechseln (Kopfhörer, Headset): alle 2 s prüfen und neu anbinden
+        _watch = new Timer(_ => CheckDevices(), null, 2000, 2000);
+    }
+
+    private void Attach()
+    {
+        lock (_gate)
+        {
+            Detach();
+            try
+            {
+                _render = _enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+                _renderId = _render.ID;
+                _render.AudioEndpointVolume.OnVolumeNotification += OnRenderChanged;
+            }
+            catch (Exception ex)
+            {
+                _render = null;
+                _renderId = null;
+                Log.Warn($"Kein Wiedergabegerät: {ex.Message}");
+            }
+            try
+            {
+                _capture = _enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Communications);
+                _captureId = _capture.ID;
+                _capture.AudioEndpointVolume.OnVolumeNotification += OnCaptureChanged;
+            }
+            catch (Exception ex)
+            {
+                _capture = null;
+                _captureId = null;
+                Log.Info($"Kein Mikrofon: {ex.Message}");
+            }
+        }
+    }
+
+    private void Detach()
+    {
+        try { if (_render != null) _render.AudioEndpointVolume.OnVolumeNotification -= OnRenderChanged; } catch { /* Gerät weg */ }
+        try { if (_capture != null) _capture.AudioEndpointVolume.OnVolumeNotification -= OnCaptureChanged; } catch { /* Gerät weg */ }
+        _render?.Dispose();
+        _capture?.Dispose();
+        _render = null;
+        _capture = null;
+    }
+
+    private void CheckDevices()
+    {
+        try
+        {
+            string? r = null, c = null;
+            try { r = _enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia).ID; } catch { /* keins */ }
+            try { c = _enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Communications).ID; } catch { /* keins */ }
+            if (r == _renderId && c == _captureId) return;
+            Log.Info("Standard-Audiogerät gewechselt");
+            Attach();
+            foreach (var (id, value) in GetStates()) StateChanged?.Invoke(id, value);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Geräteprüfung: {ex.Message}");
+        }
+    }
+
+    private void OnRenderChanged(AudioVolumeNotificationData d)
+    {
+        StateChanged?.Invoke("volume", ((int)Math.Round(d.MasterVolume * 100)).ToString());
+        StateChanged?.Invoke("mute", d.Muted ? "on" : "off");
+    }
+
+    private void OnCaptureChanged(AudioVolumeNotificationData d) =>
+        StateChanged?.Invoke("mic_mute", d.Muted ? "on" : "off");
+
+    public IReadOnlyDictionary<string, string> GetStates()
+    {
+        var states = new Dictionary<string, string>();
+        lock (_gate)
+        {
+            try
+            {
+                if (_render != null)
+                {
+                    states["volume"] = ((int)Math.Round(_render.AudioEndpointVolume.MasterVolumeLevelScalar * 100)).ToString();
+                    states["mute"] = _render.AudioEndpointVolume.Mute ? "on" : "off";
+                }
+                if (_capture != null) states["mic_mute"] = _capture.AudioEndpointVolume.Mute ? "on" : "off";
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"Zustand lesen: {ex.Message}");
+            }
+        }
+        return states;
+    }
+
+    public void AdjustVolume(int deltaPercent)
+    {
+        lock (_gate)
+        {
+            if (_render == null) return;
+            var volume = _render.AudioEndpointVolume;
+            volume.MasterVolumeLevelScalar = Math.Clamp(volume.MasterVolumeLevelScalar + deltaPercent / 100f, 0f, 1f);
+            if (deltaPercent > 0 && volume.Mute) volume.Mute = false;   // lauter heisst: wieder hörbar
+        }
+    }
+
+    public void ToggleMute()
+    {
+        lock (_gate)
+        {
+            if (_render != null) _render.AudioEndpointVolume.Mute = !_render.AudioEndpointVolume.Mute;
+        }
+    }
+
+    public void ToggleMicMute()
+    {
+        lock (_gate)
+        {
+            if (_capture != null) _capture.AudioEndpointVolume.Mute = !_capture.AudioEndpointVolume.Mute;
+        }
+    }
+
+    public void LockWorkstation()
+    {
+        if (!LockWorkStation()) Log.Warn("PC sperren fehlgeschlagen");
+    }
+
+    public bool SystemCommand(string command)
+    {
+        switch (command)
+        {
+            case "screen.off":
+                SendMessage(new IntPtr(0xFFFF), 0x0112, new IntPtr(0xF170), new IntPtr(2));   // WM_SYSCOMMAND, SC_MONITORPOWER, aus
+                return true;
+            case "sleep":
+                Process.Start(new ProcessStartInfo("rundll32.exe", "powrprof.dll,SetSuspendState 0,1,0") { CreateNoWindow = true, UseShellExecute = false });
+                return true;
+            case "restart":
+                Process.Start(new ProcessStartInfo("shutdown.exe", "/r /t 0") { CreateNoWindow = true, UseShellExecute = false });
+                return true;
+            case "shutdown":
+                Process.Start(new ProcessStartInfo("shutdown.exe", "/s /t 0") { CreateNoWindow = true, UseShellExecute = false });
+                return true;
+            default:
+                Log.Warn($"Unbekannter Systembefehl '{command}'");
+                return false;
+        }
+    }
+
+    public void OpenTarget(string target, string arguments)
+    {
+        // UseShellExecute: wie "Ausfuehren" in Windows, startet Programme, oeffnet Dateien, Ordner und Adressen
+        target = target.Trim().Trim('"');   // Pfade aus der Zwischenablage haben oft Anführungszeichen
+        Process.Start(new ProcessStartInfo(target) { Arguments = arguments, UseShellExecute = true })?.Dispose();
+        Log.Info($"Gestartet: {target}");
+    }
+
+    public bool SendKeys(string combo) => KeySender.Send(combo);
+
+    private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    private const string RunValue = "OverBoardAgent";
+
+    public bool IsAutostartEnabled()
+    {
+        using var key = Registry.CurrentUser.OpenSubKey(RunKey);
+        return key?.GetValue(RunValue) is string;
+    }
+
+    public void SetAutostart(bool enabled)
+    {
+        using var key = Registry.CurrentUser.CreateSubKey(RunKey);
+        if (enabled)
+        {
+            var exe = Environment.ProcessPath ?? throw new InvalidOperationException("Programmpfad unbekannt");
+            key.SetValue(RunValue, "\"" + exe + "\"");
+        }
+        else
+        {
+            key.DeleteValue(RunValue, throwOnMissingValue: false);
+        }
+    }
+
+    public void Dispose()
+    {
+        _watch.Dispose();
+        lock (_gate) Detach();
+        _enumerator.Dispose();
+    }
+}
