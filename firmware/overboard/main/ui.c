@@ -5,6 +5,7 @@
 #include <string.h>
 #include <time.h>
 
+#include "audio.h"
 #include "board.h"
 #include "config.h"
 #include "esp_log.h"
@@ -316,6 +317,7 @@ static void confirm_show(tile_t *t)
 
 static void confirm_cancel(lv_event_t *e)
 {
+    audio_click();
     (void)e;
     s_confirm_tile = NULL;
     lv_obj_add_flag(s_confirm, LV_OBJ_FLAG_HIDDEN);
@@ -323,6 +325,7 @@ static void confirm_cancel(lv_event_t *e)
 
 static void confirm_yes(lv_event_t *e)
 {
+    audio_click();
     (void)e;
     tile_t *t = s_confirm_tile;
     s_confirm_tile = NULL;
@@ -376,6 +379,7 @@ static void tile_event(lv_event_t *e)
         flash_error(t);
         return;
     }
+    if (c == LV_EVENT_PRESSED) audio_click();           // Tastenklick (wenn eingeschaltet)
     if (t->cfg->trigger != TRIG_HOLD) {                 // beim Halten zeigt der Balken den Druck an
         if (c == LV_EVENT_PRESSED) flash_press(t);
         else if (c == LV_EVENT_RELEASED || c == LV_EVENT_PRESS_LOST) flash_release(t);
@@ -420,6 +424,7 @@ static void show_page(int p)
 
 static void nav_event(lv_event_t *e)
 {
+    audio_click();
     show_page((int)(intptr_t)lv_event_get_user_data(e));
 }
 

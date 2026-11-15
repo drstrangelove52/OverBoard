@@ -18,6 +18,7 @@
 #include "tinyusb.h"
 #include "tusb_cdc_acm.h"
 #include "esp_app_desc.h"
+#include "audio.h"
 #include "ui.h"
 
 static const char *TAG = "pclink";
@@ -298,6 +299,10 @@ static void handle_line(const char *line)
         cJSON_AddStringToObject(o, "t", "pong");
         send_json(o);
         cJSON_Delete(o);
+    } else if (!strcmp(type, "sound")) {
+        // Ton zum Ausprobieren der Lautstaerke: {"t":"sound","id":"click"|"info"|"ok"|"warn"|"alarm"}
+        const cJSON *id = cJSON_GetObjectItem(root, "id");
+        if (cJSON_IsString(id)) audio_play(id->valuestring, -1);
     } else if (!strcmp(type, "creds_set")) {
         // Zugangsdaten vom PC-Agent: {"wifi":{"ssid","pass"},"ha":{"uri","token"},"mqtt":{"uri","user","pass"}}.
         // Teile, die fehlen, bleiben unveraendert. Werte werden nicht protokolliert.

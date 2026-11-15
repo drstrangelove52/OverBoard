@@ -7,3 +7,7 @@ esp_err_t audio_init(void);
 // Eingebautes Tonmuster abspielen: "info", "ok", "warn", "alarm". Unbekannt/NULL/"none" = nichts.
 // volume 0..100, bei <0 gilt der Standardwert. Kehrt sofort zurueck, gespielt wird in einem eigenen Task.
 void audio_play(const char *sound, int volume);
+
+// Tastenklick (kurzes, weiches Ticken) mit der Lautstaerke aus der Konfiguration. Tut nichts, wenn der Klick ausgeschaltet ist.
+// Darf aus jedem Task aufgerufen werden und kehrt sofort zurueck.
+void audio_click(void);

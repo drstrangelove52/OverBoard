@@ -111,6 +111,14 @@ public sealed class IdleValueModel
     [JsonPropertyName("max"), JsonPropertyOrder(4)] public double? Max { get; set; }
 }
 
+/// <summary>Töne: Lautstärke der Hinweistöne und der Tastenklick (jeweils 0 bis 100 Prozent).</summary>
+public sealed class SoundModel
+{
+    [JsonPropertyName("volume")] public int Volume { get; set; } = 40;
+    [JsonPropertyName("click")] public bool Click { get; set; } = true;
+    [JsonPropertyName("click_volume")] public int ClickVolume { get; set; } = 30;
+}
+
 public sealed class IdleModel
 {
     [JsonPropertyName("timeout_s")] public int TimeoutS { get; set; } = 60;
@@ -128,7 +136,8 @@ public sealed class ConfigModel
     [JsonPropertyName("brightness"), JsonPropertyOrder(4)] public int Brightness { get; set; } = 80;
     [JsonPropertyName("hold_ms"), JsonPropertyOrder(5)] public int HoldMs { get; set; } = 600;
     [JsonPropertyName("idle"), JsonPropertyOrder(6)] public IdleModel Idle { get; set; } = new();
-    [JsonPropertyName("pages"), JsonPropertyOrder(7)] public List<PageModel> Pages { get; set; } = [];
+    [JsonPropertyName("sound"), JsonPropertyOrder(7)] public SoundModel Sound { get; set; } = new();
+    [JsonPropertyName("pages"), JsonPropertyOrder(8)] public List<PageModel> Pages { get; set; } = [];
 
     private static readonly JsonSerializerOptions Compact = new()
     {
@@ -175,6 +184,8 @@ public static class ConfigValidator
         if (c.Theme is not ("dark" or "light")) errors.Add("Design muss dark oder light sein");
         if (c.Brightness is < 1 or > 100) errors.Add("Helligkeit muss zwischen 1 und 100 liegen");
         if (c.HoldMs is < 100 or > 5000) errors.Add("Haltedauer muss zwischen 100 und 5000 ms liegen");
+        if (c.Sound.Volume is < 0 or > 100) errors.Add("Lautstärke der Hinweistöne: 0 bis 100");
+        if (c.Sound.ClickVolume is < 0 or > 100) errors.Add("Lautstärke des Tastenklicks: 0 bis 100");
         if (c.Idle.TimeoutS is < 5 or > 3600) errors.Add("Ruhemodus nach: 5 bis 3600 s");
         if (c.Idle.Brightness is < 1 or > 100) errors.Add("Helligkeit im Ruhemodus: 1 bis 100");
         if (c.Idle.MoveS is < 5 or > 3600) errors.Add("Uhr verschieben: 5 bis 3600 s");

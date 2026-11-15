@@ -56,6 +56,9 @@ static const ob_config_t k_default = {
     },
     .n_idle_items = 2,
     .hold_ms = 600,
+    .sound_volume = 40,
+    .click = true,
+    .click_volume = 30,
     .pages = k_pages,
     .n_pages = (int)(sizeof(k_pages) / sizeof(k_pages[0])),
 };
@@ -244,6 +247,21 @@ ob_config_t *config_parse(const char *json, size_t len, char *err, size_t err_le
     }
     if (!read_int(root, "brightness", 1, 100, 80, &cfg->brightness, "Konfiguration", err, err_len)) goto fail;
     if (!read_int(root, "hold_ms", 100, 5000, 600, &cfg->hold_ms, "Konfiguration", err, err_len)) goto fail;
+    // Toene: {"volume": 0..100 (Hinweise), "click": true|false, "click_volume": 0..100}
+    cfg->sound_volume = 40;
+    cfg->click = true;
+    cfg->click_volume = 30;
+    const cJSON *snd = cJSON_GetObjectItem(root, "sound");
+    if (snd) {
+        if (!cJSON_IsObject(snd)) FAIL("Konfiguration: 'sound' muss ein Objekt sein");
+        if (!read_int(snd, "volume", 0, 100, 40, &cfg->sound_volume, "sound", err, err_len)) goto fail;
+        if (!read_int(snd, "click_volume", 0, 100, 30, &cfg->click_volume, "sound", err, err_len)) goto fail;
+        const cJSON *ck = cJSON_GetObjectItem(snd, "click");
+        if (ck) {
+            if (!cJSON_IsBool(ck)) FAIL("sound: 'click' muss true oder false sein");
+            cfg->click = cJSON_IsTrue(ck);
+        }
+    }
     const cJSON *idle = cJSON_GetObjectItem(root, "idle");
     cfg->idle_s = 60;
     cfg->idle_brightness = 8;
@@ -453,6 +471,10 @@ char *config_serialize(const ob_config_t *cfg)
     cJSON_AddStringToObject(root, "theme", cfg->theme);
     cJSON_AddNumberToObject(root, "brightness", cfg->brightness);
     cJSON_AddNumberToObject(root, "hold_ms", cfg->hold_ms);
+    cJSON *snd = cJSON_AddObjectToObject(root, "sound");
+    cJSON_AddNumberToObject(snd, "volume", cfg->sound_volume);
+    cJSON_AddBoolToObject(snd, "click", cfg->click);
+    cJSON_AddNumberToObject(snd, "click_volume", cfg->click_volume);
     cJSON *idle = cJSON_AddObjectToObject(root, "idle");
     cJSON_AddNumberToObject(idle, "timeout_s", cfg->idle_s);
     cJSON_AddNumberToObject(idle, "brightness", cfg->idle_brightness);

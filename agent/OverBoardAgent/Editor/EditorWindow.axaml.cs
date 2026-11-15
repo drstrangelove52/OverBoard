@@ -121,14 +121,22 @@ public partial class EditorWindow : Window
         DisplayCardHint.Text = T("Änderungen hier gehen sofort aufs Gerät (wie im Display-Editor). Die Sprache gilt nur für das Display, nicht für dieses Programm.",
                                  "Changes here are sent to the device immediately (as in the display editor). The language applies to the display only, not to this program.");
         IdleHeader.Text = T("Ruhemodus", "Idle mode");
+        SoundHeader.Text = T("Töne", "Sounds");
+        SoundHint.Text = T("Die Lautstärke gilt für das Gerät. Mit den Testknöpfen hörst du das Ergebnis sofort (das Gerät muss verbunden sein).",
+                           "The volume applies to the device. Use the test buttons to hear the result immediately (the device must be connected).");
+        ClickBox.Content = T("Tastenklick beim Berühren", "Key click when touching");
+        ClickVolumeLabel.Text = T("Lautstärke des Tastenklicks (%)", "Key click volume (%)");
+        SoundVolumeLabel.Text = T("Lautstärke der Hinweistöne (%, 0 = aus)", "Notification sound volume (%, 0 = off)");
+        ClickTestButton.Content = T("Klick testen", "Test click");
+        SoundTestButton.Content = T("Hinweiston testen", "Test notification");
         UpdateConnection();
         UndoButton.Content = T("↶ Rückgängig", "↶ Undo");
         RedoButton.Content = T("↷ Wiederholen", "↷ Redo");
         SendButton.Content = T("Jetzt senden", "Send now");
         LiveBox.Content = T("Live auf das Gerät", "Live to device");
         LoadButton.Content = T("Vom Gerät laden", "Load from device");
-        OpenFileButton.Content = T("Aus Datei …", "From file …");
-        SaveFileButton.Content = T("In Datei …", "To file …");
+        OpenFileButton.Content = T("Laden …", "Load …");
+        SaveFileButton.Content = T("Speichern unter …", "Save as …");
         ResetButton.Content = T("Auf Standard", "Reset to default");
         JsonButton.Content = T("JSON …", "JSON …");
 
@@ -358,6 +366,12 @@ public partial class EditorWindow : Window
         // Geräteeinstellungen
         LanguageBox.SelectionChanged += (_, _) => EditCfg("lang", c => c.Language = LanguageBox.SelectedIndex == 1 ? "en" : "de");
         ThemeBox.SelectionChanged += (_, _) => EditCfg("theme", c => c.Theme = ThemeBox.SelectedIndex == 1 ? "light" : "dark");
+        ClickBox.IsCheckedChanged += (_, _) => EditCfg("click", c => c.Sound.Click = ClickBox.IsChecked == true);
+        ClickVolumeBox.ValueChanged += (_, _) => EditCfg("clickvol", c => c.Sound.ClickVolume = (int)(ClickVolumeBox.Value ?? c.Sound.ClickVolume));
+        SoundVolumeBox.ValueChanged += (_, _) => EditCfg("soundvol", c => c.Sound.Volume = (int)(SoundVolumeBox.Value ?? c.Sound.Volume));
+        // Testen: das Gerät spielt den Ton mit der gerade gesendeten Lautstärke (bei Live-Senden ist sie schon dort)
+        ClickTestButton.Click += async (_, _) => await TestSoundAsync("click");
+        SoundTestButton.Click += async (_, _) => await TestSoundAsync("info");
         BrightnessBox.ValueChanged += (_, _) => EditCfg("bright", c => c.Brightness = (int)(BrightnessBox.Value ?? c.Brightness));
         HoldBox.ValueChanged += (_, _) => EditCfg("hold", c => c.HoldMs = (int)(HoldBox.Value ?? c.HoldMs));
         IdleBox.ValueChanged += (_, _) => EditCfg("idle", c => c.Idle.TimeoutS = (int)(IdleBox.Value ?? c.Idle.TimeoutS));
@@ -456,6 +470,14 @@ public partial class EditorWindow : Window
                     list.Add(T("Seite", "Page") + $" {p + 1} «{_cfg.Pages[p].Title.Get(_cfg.Language)}»: " + (title.Length > 0 ? title : T("Kachel ohne Titel", "tile without title")));
                 }
         return list;
+    }
+
+    /// <summary>Lässt das Gerät einen Ton spielen. Ist Live-Senden aus oder noch ein Wert unterwegs, wird er vorher gesendet.</summary>
+    private async Task TestSoundAsync(string id)
+    {
+        if (!_core!.Link.IsConnected) { Status(T("Kein Gerät verbunden.", "No device connected."), error: true); return; }
+        if (_dirty) await SendAsync(auto: true);          // aktuelle Lautstärke zuerst aufs Gerät
+        _core.Link.Send(System.Text.Json.JsonSerializer.Serialize(new { t = "sound", id }));
     }
 
     private void OnAppLanguageChanged()
@@ -597,6 +619,9 @@ public partial class EditorWindow : Window
         {
             LanguageBox.SelectedIndex = _cfg.Language == "en" ? 1 : 0;
             ThemeBox.SelectedIndex = _cfg.Theme == "light" ? 1 : 0;
+            ClickBox.IsChecked = _cfg.Sound.Click;
+            ClickVolumeBox.Value = _cfg.Sound.ClickVolume;
+            SoundVolumeBox.Value = _cfg.Sound.Volume;
             BrightnessBox.Value = _cfg.Brightness;
             HoldBox.Value = _cfg.HoldMs;
             IdleBox.Value = _cfg.Idle.TimeoutS;

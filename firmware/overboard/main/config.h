@@ -46,6 +46,9 @@ typedef struct {
     tile_cfg_t idle_items[2];// bis zu zwei Werte im Ruhemodus (verwendet: Quelle, Titel, Format, Obergrenze)
     int n_idle_items;
     int hold_ms;             // Standard-Haltedauer fuer Buttons mit Halten (ms)
+    int sound_volume;        // Lautstaerke der Hinweistoene, Prozent (0 = aus)
+    bool click;              // Tastenklick beim Beruehren von Tasten
+    int click_volume;        // Lautstaerke des Tastenklicks, Prozent
     const page_cfg_t *pages;
     int n_pages;
     void *arena;             // nur bei dynamischen Konfigurationen: gesammelter Speicher, gehoert config_free()
