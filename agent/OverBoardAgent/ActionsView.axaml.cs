@@ -20,6 +20,9 @@ public partial class ActionsView : UserControl
         InitializeComponent();
     }
 
+    /// <summary>Liefert, wo eine Aktion (pc:&lt;Kennung&gt;) verwendet wird. Vom Hauptfenster gesetzt, damit verwendete Aktionen nicht gelöscht werden.</summary>
+    public Func<string, IReadOnlyList<string>>? UsedBy { get; set; }
+
     private Window? Owner => TopLevel.GetTopLevel(this) as Window;
 
     public void Init(AgentCore core)
@@ -87,7 +90,8 @@ public partial class ActionsView : UserControl
     private async Task EditAsync(UserAction? existing)
     {
         if (_core == null || Owner == null) return;
-        var dialog = new ActionEditWindow(_core.Actions, existing);
+        var locked = existing != null && (UsedBy?.Invoke("pc:" + existing.Id).Count ?? 0) > 0;
+        var dialog = new ActionEditWindow(_core.Actions, existing, locked);
         await dialog.ShowDialog<UserAction?>(Owner);
     }
 
@@ -107,6 +111,13 @@ public partial class ActionsView : UserControl
     private async Task DeleteSelectedAsync()
     {
         if (ActionList.SelectedItem is not ActionRow row) return;
+        var uses = UsedBy?.Invoke("pc:" + row.Id) ?? [];
+        if (uses.Count > 0)
+        {
+            var shown = string.Join("\n", uses.Take(6).Select(u => "• " + u)) + (uses.Count > 6 ? $"\n… (+{uses.Count - 6})" : "");
+            await ShowMessageAsync(Strings.Format("act.inuse", row.Name, shown), false);
+            return;
+        }
         if (await ShowMessageAsync(Strings.Format("win.delete.confirm", row.Name), true))
             _core!.Actions.Remove(row.Id);
     }

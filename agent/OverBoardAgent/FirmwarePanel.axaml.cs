@@ -30,6 +30,8 @@ public partial class FirmwarePanel : UserControl
         if (File.Exists(Path.Combine(bundled, "flasher_args.json"))) _bundledDir = bundled;
         if (_bundledDir != null && (Settings.FirmwareDir.Length == 0 || !Directory.Exists(Settings.FirmwareDir))) Settings.FirmwareDir = _bundledDir;
         SourceBox.Text = Settings.FirmwareDir;
+        // Mit mitgelieferter Firmware ist die Ordnerwahl nur für Entwickler: eingeklappt unter "Erweitert"
+        AdvancedExpander.IsExpanded = _bundledDir == null;
         ApplyTexts();
         SourceBox.LostFocus += (_, _) => SourceChanged();
         BrowseButton.Click += async (_, _) => await BrowseAsync();
@@ -40,6 +42,7 @@ public partial class FirmwarePanel : UserControl
 
     public void ApplyTexts()
     {
+        AdvancedExpander.Header = Strings.Get("fw.advanced");
         SourceLabel.Text = Strings.Get("fw.source");
         BrowseButton.Content = Strings.Get("fw.browse");
         InstallButton.Content = Strings.Get("fw.install");

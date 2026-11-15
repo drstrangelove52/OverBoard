@@ -14,7 +14,8 @@ public partial class ActionEditWindow : Window
 
     public ActionEditWindow() : this(new ActionStore(), null) { }
 
-    public ActionEditWindow(ActionStore store, UserAction? existing)
+    /// <param name="idLocked">Die Kennung wird auf Kacheln verwendet und darf nicht geändert werden (sonst zeigen die Kacheln ins Leere).</param>
+    public ActionEditWindow(ActionStore store, UserAction? existing, bool idLocked = false)
     {
         InitializeComponent();
         _store = store;
@@ -52,6 +53,11 @@ public partial class ActionEditWindow : Window
             KindBox.SelectedIndex = 0;
         }
         UpdateKindPanels();
+        if (idLocked)
+        {
+            IdBox.IsEnabled = false;
+            IdLabel.Text += "  " + Strings.Get("edit.id.locked");
+        }
 
         // Die Kennung folgt dem Namen, bis sie von Hand geändert wird
         NameBox.TextChanged += (_, _) =>

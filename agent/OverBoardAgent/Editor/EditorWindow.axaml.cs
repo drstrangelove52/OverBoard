@@ -75,6 +75,7 @@ public partial class EditorWindow : Window
         BuildIdleValues();
         BuildNav();
         ActionsPage.Init(core);
+        ActionsPage.UsedBy = ActionUsage;
         SetupPage.Init(core);
         FirmwarePage.Init(core);
         AppPage.Init(core, OnAppLanguageChanged);
@@ -441,6 +442,20 @@ public partial class EditorWindow : Window
         ActionsPage.IsVisible = index == 1;
         PageDevice.IsVisible = index == 2;
         AppPage.IsVisible = index == 3;
+    }
+
+    /// <summary>Welche Kacheln verwenden diese Aktion? (für die Sperre beim Löschen)</summary>
+    private IReadOnlyList<string> ActionUsage(string action)
+    {
+        var list = new List<string>();
+        for (var p = 0; p < _cfg.Pages.Count; p++)
+            foreach (var t in _cfg.Pages[p].Tiles)
+                if (t.Action == action)
+                {
+                    var title = t.Title.Get(_cfg.Language).Replace('\n', ' ');
+                    list.Add(T("Seite", "Page") + $" {p + 1} «{_cfg.Pages[p].Title.Get(_cfg.Language)}»: " + (title.Length > 0 ? title : T("Kachel ohne Titel", "tile without title")));
+                }
+        return list;
     }
 
     private void OnAppLanguageChanged()
