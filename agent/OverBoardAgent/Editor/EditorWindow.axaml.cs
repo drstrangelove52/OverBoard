@@ -101,7 +101,17 @@ public partial class EditorWindow : Window
         _core.Platform.StateChanged += OnPcStateChanged;
         _valuesTimer.Tick += async (_, _) => await RefreshValuesAsync();
         _valuesTimer.Start();
-        Opened += async (_, _) => { await LoadInitialAsync(); await RefreshValuesAsync(); };
+        Opened += async (_, _) => { FitToScreen(); await LoadInitialAsync(); await RefreshValuesAsync(); };
+        Closing += (_, _) =>
+        {
+            // Grösse merken (nur im normalen Zustand, nicht maximiert)
+            if (WindowState == WindowState.Normal)
+            {
+                Settings.WindowWidth = Width;
+                Settings.WindowHeight = Height;
+                Settings.Save();
+            }
+        };
         Closed += (_, _) =>
         {
             _sendTimer.Stop();
@@ -115,7 +125,32 @@ public partial class EditorWindow : Window
         _core.Actions.Changed += OnActionsChanged;
     }
 
+    /// <summary>
+    /// Passt die Fenstergrösse an den Bildschirm an: die zuletzt benutzte Grösse, sonst die Standardgrösse, jedenfalls höchstens
+    /// 92 % des nutzbaren Bereichs (ohne Taskleiste). So ist das Fenster auf einem Notebook nicht zu gross.
+    /// </summary>
+    private void FitToScreen()
+    {
+        var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+        if (screen == null) return;
+        var scale = screen.Scaling <= 0 ? 1.0 : screen.Scaling;
+        var maxW = screen.WorkingArea.Width / scale * 0.92;
+        var maxH = screen.WorkingArea.Height / scale * 0.92;
+        var wantW = Settings.WindowWidth >= MinWidth ? Settings.WindowWidth : Width;
+        var wantH = Settings.WindowHeight >= MinHeight ? Settings.WindowHeight : Height;
+        Width = Math.Max(MinWidth > maxW ? maxW : MinWidth, Math.Min(wantW, maxW));
+        Height = Math.Max(MinHeight > maxH ? maxH : MinHeight, Math.Min(wantH, maxH));
+        // in der Mitte des nutzbaren Bereichs
+        var x = screen.WorkingArea.X + (int)((screen.WorkingArea.Width - Width * scale) / 2);
+        var y = screen.WorkingArea.Y + (int)((screen.WorkingArea.Height - Height * scale) / 2);
+        Position = new PixelPoint(x, y);
+    }
+
     private static string T(string de, string en) => Strings.Language == "en" ? en : de;
+
+    // Zeiten stehen im Gerät in Sekunden, in der Oberfläche überall in Minuten (0,5 = 30 Sekunden)
+    private static decimal Minutes(int seconds) => Math.Round(seconds / 60m, 2);
+    private static int Seconds(decimal minutes) => (int)Math.Round(minutes * 60m);
 
     private PageModel Page => _cfg.Pages[Math.Clamp(_page, 0, Math.Max(0, _cfg.Pages.Count - 1))];
 
@@ -133,7 +168,16 @@ public partial class EditorWindow : Window
         DisplayCardHeader.Text = T("Anzeige des Geräts", "Device display");
         DisplayCardHint.Text = T("Änderungen hier gehen sofort aufs Gerät (wie im Display-Editor). Die Sprache gilt nur für das Display, nicht für dieses Programm.",
                                  "Changes here are sent to the device immediately (as in the display editor). The language applies to the display only, not to this program.");
-        IdleHeader.Text = T("Ruhemodus", "Idle mode");
+        IdleHeader.Text = T("Bildschirmschoner und Energiesparen", "Screen saver and power saving");
+        IdleHint.Text = T("Alle Zeiten sind in Minuten (0,5 = 30 Sekunden). Der Ablauf: Ohne Berührung startet der Bildschirmschoner, danach geht das Display ganz aus. Berührung und Hinweise (Banner, Alarm) wecken es.",
+                          "All times are in minutes (0.5 = 30 seconds). The sequence: without touch the screen saver starts, then the display switches off completely. Touch and notifications (banners, alarms) wake it.");
+        SaverHeader.Text = T("1 · Bildschirmschoner", "1 · Screen saver");
+        PowerHeader.Text = T("2 · Display ganz ausschalten (Strom sparen)", "2 · Switch the display off completely (save power)");
+        PowerHint.Text = T("Sinnvoll, wenn das Gerät an einem USB-Anschluss mit dauerndem Strom hängt (Hub, Dockingstation). Das Gerät läuft weiter und empfängt Hinweise, nur die Hintergrundbeleuchtung ist aus.",
+                           "Useful if the device is on a USB port that is always powered (hub, docking station). The device keeps running and receives notifications, only the backlight is off.");
+        OffMinLabel.Text = T("Ausschalten nach … Minuten im Bildschirmschoner (0 = nie)", "Switch off after … minutes in the screen saver (0 = never)");
+        PcAwayBox.Content = T("Früher ausschalten, wenn der PC schläft, gesperrt oder aus ist", "Switch off earlier when the PC sleeps, is locked or is off");
+        AwayDelayLabel.Text = T("… nach … Minuten ohne Berührung", "… after … minutes without touch");
         SoundHeader.Text = T("Töne", "Sounds");
         SoundHint.Text = T("Die Lautstärke gilt für das Gerät. Mit den Testknöpfen hörst du das Ergebnis sofort (das Gerät muss verbunden sein).",
                            "The volume applies to the device. Use the test buttons to hear the result immediately (the device must be connected).");
@@ -168,9 +212,9 @@ public partial class EditorWindow : Window
         ThemeLabel.Text = T("Farbdesign", "Colour theme");
         BrightnessLabel.Text = T("Helligkeit (%)", "Brightness (%)");
         HoldLabel.Text = T("Haltedauer für „Gedrückt halten“ (ms)", "Hold time for “press and hold” (ms)");
-        IdleLabel.Text = T("Ruhemodus nach (s)", "Idle mode after (s)");
-        IdleBrightLabel.Text = T("Helligkeit im Ruhemodus (%)", "Brightness in idle mode (%)");
-        IdleMoveLabel.Text = T("Uhr verschiebt sich alle (s)", "Clock moves every (s)");
+        IdleLabel.Text = T("Starten nach … Minuten ohne Berührung", "Start after … minutes without touch");
+        IdleBrightLabel.Text = T("Helligkeit (%)", "Brightness (%)");
+        IdleMoveLabel.Text = T("Uhr wechselt die Stelle alle … Minuten (gegen Einbrennen)", "Clock changes position every … minutes (against burn-in)");
 
         TileHeader.Text = T("Kachel", "Tile");
         NoTileText.Text = T("Kachel auf dem Display anklicken. Ziehen verschiebt sie, das blaue Quadrat unten rechts vergrössert sie. Entf löscht.",
@@ -200,7 +244,7 @@ public partial class EditorWindow : Window
         for (var i = 0; i < 2; i++)
         {
             FillCombo(_idleFmt[i], FormatNames.Select(f => T(f.De, f.En)).ToList());
-            _idleHead[i].Text = T($"Ruhemodus, Wert {i + 1}", $"Idle mode, value {i + 1}");
+            _idleHead[i].Text = T($"Wert {i + 1} unter der Uhr", $"Value {i + 1} below the clock");
             _idleSrc[i].Watermark = T("Quelle, z. B. sensor.xyz (leer = nicht anzeigen)", "Source, e.g. sensor.xyz (empty = hidden)");
             _idleDe[i].Watermark = T("Titel", "Title");
         }
@@ -381,6 +425,9 @@ public partial class EditorWindow : Window
         // Geräteeinstellungen
         LanguageBox.SelectionChanged += (_, _) => EditCfg("lang", c => c.Language = LanguageBox.SelectedIndex == 1 ? "en" : "de");
         ThemeBox.SelectionChanged += (_, _) => EditCfg("theme", c => c.Theme = ThemeBox.SelectedIndex == 1 ? "light" : "dark");
+        OffMinBox.ValueChanged += (_, _) => EditCfg("offmin", c => c.Idle.OffS = OffMinBox.Value is { } m && m > 0 ? Math.Max(10, Seconds(m)) : 0);
+        PcAwayBox.IsCheckedChanged += (_, _) => { AwayDelayBox.IsEnabled = PcAwayBox.IsChecked == true; EditCfg("pcaway", c => c.Power.PcAway = PcAwayBox.IsChecked == true); };
+        AwayDelayBox.ValueChanged += (_, _) => EditCfg("awaydelay", c => c.Power.PcAwayDelayS = AwayDelayBox.Value is { } m ? Math.Max(5, Seconds(m)) : c.Power.PcAwayDelayS);
         ClickBox.IsCheckedChanged += (_, _) => EditCfg("click", c => c.Sound.Click = ClickBox.IsChecked == true);
         ClickVolumeBox.ValueChanged += (_, _) => EditCfg("clickvol", c => c.Sound.ClickVolume = (int)(ClickVolumeBox.Value ?? c.Sound.ClickVolume));
         SoundVolumeBox.ValueChanged += (_, _) => EditCfg("soundvol", c => c.Sound.Volume = (int)(SoundVolumeBox.Value ?? c.Sound.Volume));
@@ -389,9 +436,9 @@ public partial class EditorWindow : Window
         SoundTestButton.Click += async (_, _) => await TestSoundAsync("info");
         BrightnessBox.ValueChanged += (_, _) => EditCfg("bright", c => c.Brightness = (int)(BrightnessBox.Value ?? c.Brightness));
         HoldBox.ValueChanged += (_, _) => EditCfg("hold", c => c.HoldMs = (int)(HoldBox.Value ?? c.HoldMs));
-        IdleBox.ValueChanged += (_, _) => EditCfg("idle", c => c.Idle.TimeoutS = (int)(IdleBox.Value ?? c.Idle.TimeoutS));
+        IdleBox.ValueChanged += (_, _) => EditCfg("idle", c => c.Idle.TimeoutS = IdleBox.Value is { } m ? Math.Max(5, Seconds(m)) : c.Idle.TimeoutS);
         IdleBrightBox.ValueChanged += (_, _) => EditCfg("idleb", c => c.Idle.Brightness = (int)(IdleBrightBox.Value ?? c.Idle.Brightness));
-        IdleMoveBox.ValueChanged += (_, _) => EditCfg("idlem", c => c.Idle.MoveS = (int)(IdleMoveBox.Value ?? c.Idle.MoveS));
+        IdleMoveBox.ValueChanged += (_, _) => EditCfg("idlem", c => c.Idle.MoveS = IdleMoveBox.Value is { } m ? Math.Max(5, Seconds(m)) : c.Idle.MoveS);
 
         // Kachel-Eigenschaften
         TypeBox.SelectionChanged += (_, _) => EditTile("type", t =>
@@ -663,14 +710,18 @@ public partial class EditorWindow : Window
         {
             LanguageBox.SelectedIndex = _cfg.Language == "en" ? 1 : 0;
             ThemeBox.SelectedIndex = _cfg.Theme == "light" ? 1 : 0;
+            OffMinBox.Value = Minutes(_cfg.Idle.OffS);
+            PcAwayBox.IsChecked = _cfg.Power.PcAway;
+            AwayDelayBox.Value = Minutes(_cfg.Power.PcAwayDelayS);
+            AwayDelayBox.IsEnabled = _cfg.Power.PcAway;
             ClickBox.IsChecked = _cfg.Sound.Click;
             ClickVolumeBox.Value = _cfg.Sound.ClickVolume;
             SoundVolumeBox.Value = _cfg.Sound.Volume;
             BrightnessBox.Value = _cfg.Brightness;
             HoldBox.Value = _cfg.HoldMs;
-            IdleBox.Value = _cfg.Idle.TimeoutS;
+            IdleBox.Value = Minutes(_cfg.Idle.TimeoutS);
             IdleBrightBox.Value = _cfg.Idle.Brightness;
-            IdleMoveBox.Value = _cfg.Idle.MoveS;
+            IdleMoveBox.Value = Minutes(_cfg.Idle.MoveS);
             _cfg.Idle.Values ??= DefaultIdleValues();
             for (var i = 0; i < 2; i++)
             {

@@ -43,6 +43,9 @@ typedef struct {
     int idle_s;              // Sekunden bis zum Ruhemodus
     int idle_brightness;     // Helligkeit im Ruhemodus, Prozent
     int idle_move_s;         // Uhr im Ruhemodus alle n Sekunden verschieben
+    int idle_off_s;          // Display im Ruhemodus nach n Sekunden ganz ausschalten (0 = nie)
+    bool pc_away;            // Display ausschalten, wenn der PC weg ist (schlaeft, gesperrt, aus oder Programm beendet)
+    int pc_away_delay_s;     // so lange ohne Beruehrung warten, bevor es ausgeht
     tile_cfg_t idle_items[2];// bis zu zwei Werte im Ruhemodus (verwendet: Quelle, Titel, Format, Obergrenze)
     int n_idle_items;
     int hold_ms;             // Standard-Haltedauer fuer Buttons mit Halten (ms)

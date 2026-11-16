@@ -9,6 +9,12 @@ public interface IPlatform : IDisposable
     /// <summary>Ein Zustand hat sich geändert (id wie im Protokoll: volume, mute, mic_mute; Wert als Text).</summary>
     event Action<string, string>? StateChanged;
 
+    /// <summary>Der PC ist weg (Ruhezustand, gesperrt, abgemeldet, wird heruntergefahren) oder wieder da.</summary>
+    event Action<bool>? AwayChanged;
+
+    /// <summary>Der PC ist gerade weg.</summary>
+    bool IsAway { get; }
+
     /// <summary>Alle aktuellen Zustände.</summary>
     IReadOnlyDictionary<string, string> GetStates();
 

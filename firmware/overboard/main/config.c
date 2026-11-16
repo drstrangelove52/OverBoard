@@ -50,6 +50,9 @@ static const ob_config_t k_default = {
     .idle_s = 60,
     .idle_brightness = 8,
     .idle_move_s = 60,
+    .idle_off_s = 0,
+    .pc_away = false,
+    .pc_away_delay_s = 30,
     .idle_items = {
         { TILE_VALUE, 0, 0, 1, 1, "sensor.inverter_active_power",    { "Solar", "Solar" }, NULL, FMT_POWER, 0, TRIG_NONE, 0, NULL },
         { TILE_VALUE, 0, 0, 1, 1, "sensor.power_consumption_house", { "Haus", "House" },  NULL, FMT_POWER, 0, TRIG_NONE, 0, NULL },
@@ -266,11 +269,27 @@ ob_config_t *config_parse(const char *json, size_t len, char *err, size_t err_le
     cfg->idle_s = 60;
     cfg->idle_brightness = 8;
     cfg->idle_move_s = 60;
+    cfg->idle_off_s = 0;
+    cfg->pc_away = false;
+    cfg->pc_away_delay_s = 30;
     if (idle) {
         if (!cJSON_IsObject(idle)) FAIL("Konfiguration: 'idle' muss ein Objekt sein");
         if (!read_int(idle, "timeout_s", 5, 3600, 60, &cfg->idle_s, "idle", err, err_len)) goto fail;
         if (!read_int(idle, "brightness", 1, 100, 8, &cfg->idle_brightness, "idle", err, err_len)) goto fail;
         if (!read_int(idle, "move_s", 5, 3600, 60, &cfg->idle_move_s, "idle", err, err_len)) goto fail;
+        if (!read_int(idle, "off_s", 0, 86400, 0, &cfg->idle_off_s, "idle", err, err_len)) goto fail;
+        if (cfg->idle_off_s > 0 && cfg->idle_off_s < 10) FAIL("idle: 'off_s' muss 0 (nie) oder mindestens 10 sein");
+    }
+    // Energiesparen: {"pc_away": true|false, "pc_away_delay_s": 5..3600}
+    const cJSON *pw = cJSON_GetObjectItem(root, "power");
+    if (pw) {
+        if (!cJSON_IsObject(pw)) FAIL("Konfiguration: 'power' muss ein Objekt sein");
+        const cJSON *pa = cJSON_GetObjectItem(pw, "pc_away");
+        if (pa) {
+            if (!cJSON_IsBool(pa)) FAIL("power: 'pc_away' muss true oder false sein");
+            cfg->pc_away = cJSON_IsTrue(pa);
+        }
+        if (!read_int(pw, "pc_away_delay_s", 5, 3600, 30, &cfg->pc_away_delay_s, "power", err, err_len)) goto fail;
     }
     // Werte im Ruhemodus: ohne Angabe die Standardwerte, [] = keine
     const cJSON *ivals = idle ? cJSON_GetObjectItem(idle, "values") : NULL;
@@ -479,6 +498,10 @@ char *config_serialize(const ob_config_t *cfg)
     cJSON_AddNumberToObject(idle, "timeout_s", cfg->idle_s);
     cJSON_AddNumberToObject(idle, "brightness", cfg->idle_brightness);
     cJSON_AddNumberToObject(idle, "move_s", cfg->idle_move_s);
+    cJSON_AddNumberToObject(idle, "off_s", cfg->idle_off_s);
+    cJSON *pw = cJSON_AddObjectToObject(root, "power");
+    cJSON_AddBoolToObject(pw, "pc_away", cfg->pc_away);
+    cJSON_AddNumberToObject(pw, "pc_away_delay_s", cfg->pc_away_delay_s);
     cJSON *ivals = cJSON_AddArrayToObject(idle, "values");
     for (int i = 0; i < cfg->n_idle_items; i++) {
         const tile_cfg_t *ic = &cfg->idle_items[i];

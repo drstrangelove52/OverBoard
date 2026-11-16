@@ -88,7 +88,9 @@ static lv_timer_t *s_banner_timer;
 
 static lv_obj_t *s_idle, *s_idle_grp, *s_idle_clock, *s_idle_date, *s_idle_info;
 static bool s_idle_on;
-static int s_idle_ticks, s_idle_dx, s_idle_dy;
+static int s_idle_ticks, s_idle_dx, s_idle_dy, s_idle_total;
+static bool s_screen_off;                 // Display (Hintergrundbeleuchtung) ganz aus
+static bool s_pc_away = true;             // bis der PC sich meldet, gilt er als weg
 static char s_idle_val[2][40] = { "-", "-" };
 static void idle_update_info(void);
 
@@ -710,6 +712,7 @@ static void idle_enter(void)
     const theme_t *th = theme();
     s_idle_on = true;
     s_idle_ticks = 0;
+    s_idle_total = 0;
     lv_obj_set_style_bg_color(s_idle, col(th->idle_bg), 0);
     lv_obj_set_style_text_color(s_idle_clock, col(th->idle_fg), 0);
     lv_obj_set_style_text_color(s_idle_date, col(th->title), 0);
@@ -724,6 +727,7 @@ static void idle_exit(void)
 {
     if (!s_idle_on) return;
     s_idle_on = false;
+    s_screen_off = false;
     lv_obj_add_flag(s_idle, LV_OBJ_FLAG_HIDDEN);
     board_set_backlight(ob_config()->brightness);
     lv_display_trigger_activity(NULL);        // Inaktivitaetszaehler zuruecksetzen
@@ -736,18 +740,34 @@ static void idle_touch(lv_event_t *e)
     idle_exit();                              // die Beruehrung weckt nur, sie loest nichts darunter aus
 }
 
+static void screen_off(void)
+{
+    if (s_screen_off) return;
+    s_screen_off = true;
+    board_set_backlight(0);
+    ESP_LOGI(TAG, "Display aus");
+}
+
 static void idle_check(lv_timer_t *t)
 {
     (void)t;
     const ob_config_t *cfg = ob_config();
     bool banner_visible = s_banner && !lv_obj_has_flag(s_banner, LV_OBJ_FLAG_HIDDEN);
     if (s_idle_on) {
-        if (++s_idle_ticks >= cfg->idle_move_s) {
+        s_idle_total++;
+        if (!s_screen_off && cfg->idle_off_s > 0 && s_idle_total >= cfg->idle_off_s) screen_off();
+        if (!s_screen_off && ++s_idle_ticks >= cfg->idle_move_s) {
             s_idle_ticks = 0;
             idle_move();
         }
     } else if (!banner_visible && lv_display_get_inactive_time(NULL) > (uint32_t)cfg->idle_s * 1000) {
         idle_enter();
+    }
+    // PC weg und lange keine Beruehrung: Display aus (ohne auf die normale Ruhemodus-Zeit zu warten)
+    if (cfg->pc_away && s_pc_away && !s_screen_off && !banner_visible &&
+        lv_display_get_inactive_time(NULL) >= (uint32_t)cfg->pc_away_delay_s * 1000) {
+        idle_enter();
+        screen_off();
     }
 }
 
@@ -941,6 +961,18 @@ void ui_set_status(bool wifi, bool ha)
     set_icon(s_st_wifi, wifi ? "wifi" : "wifi-off");
     lv_obj_set_style_text_color(s_st_wifi, col(wifi ? th->ok : th->bad), 0);
     lv_obj_set_style_text_color(s_st_ha, col(ha ? th->ok : th->bad), 0);
+    lvgl_port_unlock();
+}
+
+void ui_set_pc_away(bool away)
+{
+    if (!lvgl_port_lock(100)) return;
+    if (s_pc_away != away) ESP_LOGI(TAG, "PC %s", away ? "weg" : "wieder da");
+    s_pc_away = away;
+    if (!away) {                              // PC wieder da (entsperrt, aufgewacht, Programm gestartet): Display an
+        lv_display_trigger_activity(NULL);
+        if (s_idle_on) idle_exit();
+    }
     lvgl_port_unlock();
 }
 

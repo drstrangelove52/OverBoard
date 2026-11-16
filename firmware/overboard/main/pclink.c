@@ -89,6 +89,7 @@ static void set_linked(bool linked)
     s_linked = linked;
     ESP_LOGI(TAG, "PC %s", linked ? "verbunden" : "getrennt");
     ui_set_pc(linked);
+    ui_set_pc_away(!linked);              // ohne Verbindung gilt der PC als weg; mit Verbindung meldet das Programm seinen Zustand
     if (!linked) {                        // alle PC-Werte als nicht verfuegbar anzeigen
         for (int i = 0; i < s_n_ids; i++) {
             char key[32];
@@ -299,6 +300,10 @@ static void handle_line(const char *line)
         cJSON_AddStringToObject(o, "t", "pong");
         send_json(o);
         cJSON_Delete(o);
+    } else if (!strcmp(type, "pc")) {
+        // Zustand des PCs vom Programm: {"t":"pc","away":true} (schlaeft, gesperrt, wird heruntergefahren) oder false
+        const cJSON *away = cJSON_GetObjectItem(root, "away");
+        if (cJSON_IsBool(away)) ui_set_pc_away(cJSON_IsTrue(away));
     } else if (!strcmp(type, "sound")) {
         // Ton zum Ausprobieren der Lautstaerke: {"t":"sound","id":"click"|"info"|"ok"|"warn"|"alarm"}
         const cJSON *id = cJSON_GetObjectItem(root, "id");

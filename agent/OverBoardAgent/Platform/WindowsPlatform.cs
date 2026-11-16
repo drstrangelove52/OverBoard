@@ -69,10 +69,58 @@ public sealed class WindowsPlatform : IPlatform
     }
 
     public event Action<string, string>? StateChanged;
+    public event Action<bool>? AwayChanged;
+
+    private volatile bool _away;
+    public bool IsAway => _away;
+
+    private void SetAway(bool away)
+    {
+        if (_away == away) return;
+        _away = away;
+        Log.Info(away ? "PC weg (Ruhezustand, gesperrt oder wird beendet)" : "PC wieder da");
+        var handlers = AwayChanged;
+        if (handlers == null) return;
+        foreach (var h in handlers.GetInvocationList().Cast<Action<bool>>())
+        {
+            try { h(away); }
+            catch (Exception ex) { Log.Warn($"Anwesenheitsmeldung: {ex.Message}"); }
+        }
+    }
+
+    private void OnPowerMode(object? sender, PowerModeChangedEventArgs e)
+    {
+        if (e.Mode == PowerModes.Suspend) SetAway(true);
+        else if (e.Mode == PowerModes.Resume) SetAway(false);
+    }
+
+    private void OnSessionSwitch(object? sender, SessionSwitchEventArgs e)
+    {
+        switch (e.Reason)
+        {
+            case SessionSwitchReason.SessionLock:
+            case SessionSwitchReason.SessionLogoff:
+            case SessionSwitchReason.ConsoleDisconnect:
+            case SessionSwitchReason.RemoteDisconnect:
+                SetAway(true);
+                break;
+            case SessionSwitchReason.SessionUnlock:
+            case SessionSwitchReason.SessionLogon:
+            case SessionSwitchReason.ConsoleConnect:
+            case SessionSwitchReason.RemoteConnect:
+                SetAway(false);
+                break;
+        }
+    }
+
+    private void OnSessionEnding(object? sender, SessionEndingEventArgs e) => SetAway(true);   // Herunterfahren oder Abmelden
 
     public WindowsPlatform()
     {
         Attach();
+        SystemEvents.PowerModeChanged += OnPowerMode;
+        SystemEvents.SessionSwitch += OnSessionSwitch;
+        SystemEvents.SessionEnding += OnSessionEnding;
         // Standardgeräte können wechseln (Kopfhörer, Headset): alle 2 s prüfen und neu anbinden
         _watch = new Timer(_ => CheckDevices(), null, 2000, 2000);
     }
@@ -249,6 +297,9 @@ public sealed class WindowsPlatform : IPlatform
 
     public void Dispose()
     {
+        SystemEvents.PowerModeChanged -= OnPowerMode;
+        SystemEvents.SessionSwitch -= OnSessionSwitch;
+        SystemEvents.SessionEnding -= OnSessionEnding;
         _watch.Dispose();
         lock (_gate) Detach();
         _enumerator.Dispose();

@@ -111,6 +111,13 @@ public sealed class IdleValueModel
     [JsonPropertyName("max"), JsonPropertyOrder(4)] public double? Max { get; set; }
 }
 
+/// <summary>Energiesparen: Display ausschalten, wenn der PC weg ist (schläft, gesperrt, aus oder Programm beendet).</summary>
+public sealed class PowerModel
+{
+    [JsonPropertyName("pc_away")] public bool PcAway { get; set; }
+    [JsonPropertyName("pc_away_delay_s")] public int PcAwayDelayS { get; set; } = 30;
+}
+
 /// <summary>Töne: Lautstärke der Hinweistöne und der Tastenklick (jeweils 0 bis 100 Prozent).</summary>
 public sealed class SoundModel
 {
@@ -124,6 +131,8 @@ public sealed class IdleModel
     [JsonPropertyName("timeout_s")] public int TimeoutS { get; set; } = 60;
     [JsonPropertyName("brightness")] public int Brightness { get; set; } = 8;
     [JsonPropertyName("move_s")] public int MoveS { get; set; } = 60;
+    /// <summary>Display im Ruhemodus nach so vielen Sekunden ganz ausschalten (0 = nie).</summary>
+    [JsonPropertyName("off_s")] public int OffS { get; set; }
     /// <summary>null = nicht festgelegt (das Gerät nimmt Solar und Haus); leere Liste = keine Werte.</summary>
     [JsonPropertyName("values")] public List<IdleValueModel>? Values { get; set; }
 }
@@ -137,7 +146,8 @@ public sealed class ConfigModel
     [JsonPropertyName("hold_ms"), JsonPropertyOrder(5)] public int HoldMs { get; set; } = 600;
     [JsonPropertyName("idle"), JsonPropertyOrder(6)] public IdleModel Idle { get; set; } = new();
     [JsonPropertyName("sound"), JsonPropertyOrder(7)] public SoundModel Sound { get; set; } = new();
-    [JsonPropertyName("pages"), JsonPropertyOrder(8)] public List<PageModel> Pages { get; set; } = [];
+    [JsonPropertyName("power"), JsonPropertyOrder(8)] public PowerModel Power { get; set; } = new();
+    [JsonPropertyName("pages"), JsonPropertyOrder(9)] public List<PageModel> Pages { get; set; } = [];
 
     private static readonly JsonSerializerOptions Compact = new()
     {
@@ -186,6 +196,8 @@ public static class ConfigValidator
         if (c.HoldMs is < 100 or > 5000) errors.Add("Haltedauer muss zwischen 100 und 5000 ms liegen");
         if (c.Sound.Volume is < 0 or > 100) errors.Add("Lautstärke der Hinweistöne: 0 bis 100");
         if (c.Sound.ClickVolume is < 0 or > 100) errors.Add("Lautstärke des Tastenklicks: 0 bis 100");
+        if (c.Idle.OffS != 0 && c.Idle.OffS is < 10 or > 86400) errors.Add("Display aus im Ruhemodus: 0 (nie) oder 10 bis 86400 s");
+        if (c.Power.PcAwayDelayS is < 5 or > 3600) errors.Add("Display aus bei PC weg: Verzögerung 5 bis 3600 s");
         if (c.Idle.TimeoutS is < 5 or > 3600) errors.Add("Ruhemodus nach: 5 bis 3600 s");
         if (c.Idle.Brightness is < 1 or > 100) errors.Add("Helligkeit im Ruhemodus: 1 bis 100");
         if (c.Idle.MoveS is < 5 or > 3600) errors.Add("Uhr verschieben: 5 bis 3600 s");

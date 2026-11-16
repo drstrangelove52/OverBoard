@@ -15,6 +15,7 @@ void ui_set_entity(const char *entity_id, const char *state);
 void ui_set_status(bool wifi, bool ha);
 void ui_set_mqtt(bool connected);
 void ui_set_pc(bool connected);   // Verbindung zur PC-App (USB)
+void ui_set_pc_away(bool away);   // PC weg (schlaeft, gesperrt, aus, Programm beendet) oder wieder da; steuert "Display aus"
 
 typedef enum { BANNER_INFO, BANNER_OK, BANNER_WARN, BANNER_ALARM } banner_level_t;
 // Banner ueber allen Seiten einblenden (thread-safe). duration_s = 0: bleibt bis zum Antippen.

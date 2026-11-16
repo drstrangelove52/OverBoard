@@ -16,11 +16,13 @@ public sealed class AgentCore : IDisposable
         Link = link;
         Actions = actions;
         Platform.StateChanged += (id, value) => Link.SendState(id, value);
+        Platform.AwayChanged += away => Link.Send(Protocol.Pc(away));   // das Gerät schaltet danach sein Display (Einstellung "Energiesparen")
         Link.ActionReceived += id => Task.Run(() => Run(id));   // nicht auf dem Lesethread: er muss weiter Nachrichten annehmen
         Link.ConnectionChanged += (connected, _) =>
         {
             if (!connected) return;
             foreach (var (id, value) in Platform.GetStates()) Link.SendState(id, value);   // nach hello einmal alles
+            Link.Send(Protocol.Pc(Platform.IsAway));
             Task.Run(async () => await PushCredentialsAsync());                      // Home-Assistant-Zugang ans Gerät
         };
     }

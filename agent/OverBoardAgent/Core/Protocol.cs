@@ -10,6 +10,9 @@ public static class Protocol
     public static string Hello(string pcName, string appVersion) =>
         JsonSerializer.Serialize(new { t = "hello", v = Version, pc = pcName, app = appVersion });
 
+    /// <summary>Zustand des PCs für das Gerät: weg (Ruhezustand, gesperrt, wird beendet) oder da.</summary>
+    public static string Pc(bool away) => JsonSerializer.Serialize(new { t = "pc", away });
+
     public static string Ping() => "{\"t\":\"ping\"}";
 
     public static string State(string id, string value) =>

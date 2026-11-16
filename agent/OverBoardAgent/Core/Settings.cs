@@ -36,6 +36,10 @@ public static class Settings
     public static bool UpdateCheck { get; set; } = true;
     public static long LastUpdateCheckUtc { get; set; }
 
+    /// <summary>Letzte Grösse des Hauptfensters (0 = noch nicht gespeichert).</summary>
+    public static double WindowWidth { get; set; }
+    public static double WindowHeight { get; set; }
+
     /// <summary>Zuletzt gewählter Firmware-Ordner (ESP-IDF-Build mit flasher_args.json).</summary>
     public static string FirmwareDir { get; set; } = "";
 
@@ -72,6 +76,8 @@ public static class Settings
             MqttUser = Str(r, "mqtt_user");
             MqttPassword = Unprotect(Str(r, "mqtt_pass"));
             FirmwareDir = Str(r, "firmware_dir");
+            if (r.TryGetProperty("window_w", out var ww) && ww.ValueKind == JsonValueKind.Number) WindowWidth = ww.GetDouble();
+            if (r.TryGetProperty("window_h", out var wh) && wh.ValueKind == JsonValueKind.Number) WindowHeight = wh.GetDouble();
             if (r.TryGetProperty("update_check", out var uc) && uc.ValueKind is JsonValueKind.True or JsonValueKind.False) UpdateCheck = uc.GetBoolean();
             if (r.TryGetProperty("last_update_check", out var lu) && lu.ValueKind == JsonValueKind.Number) LastUpdateCheckUtc = lu.GetInt64();
         }
@@ -97,6 +103,8 @@ public static class Settings
                 mqtt_user = MqttUser,
                 mqtt_pass = Protect(MqttPassword),
                 firmware_dir = FirmwareDir,
+                window_w = WindowWidth,
+                window_h = WindowHeight,
                 update_check = UpdateCheck,
                 last_update_check = LastUpdateCheckUtc,
             }, new JsonSerializerOptions { WriteIndented = true }));
