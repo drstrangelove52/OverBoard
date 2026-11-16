@@ -13,6 +13,9 @@ public static class Protocol
     /// <summary>Zustand des PCs für das Gerät: weg (Ruhezustand, gesperrt, wird beendet) oder da.</summary>
     public static string Pc(bool away) => JsonSerializer.Serialize(new { t = "pc", away });
 
+    /// <summary>Die nächsten Kalendertermine fürs Gerät (Tag, Uhrzeit, Titel).</summary>
+    public static string Cal(IReadOnlyList<CalLine> lines) => CalendarService.ToMessage(lines);
+
     public static string Ping() => "{\"t\":\"ping\"}";
 
     public static string State(string id, string value) =>

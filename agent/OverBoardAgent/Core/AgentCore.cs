@@ -21,10 +21,66 @@ public sealed class AgentCore : IDisposable
         Link.ConnectionChanged += (connected, _) =>
         {
             if (!connected) return;
+            RefreshCalendarSoon();
             foreach (var (id, value) in Platform.GetStates()) Link.SendState(id, value);   // nach hello einmal alles
             Link.Send(Protocol.Pc(Platform.IsAway));
             Task.Run(async () => await PushCredentialsAsync());                      // Home-Assistant-Zugang ans Gerät
         };
+    }
+
+    // ---- Kalender: die Termine werden hier geladen und ans Gerät geschickt (die Adresse bleibt im Programm) ----
+
+    private readonly SemaphoreSlim _calKick = new(0);
+    private readonly CancellationTokenSource _cts = new();
+    private Task? _calLoop;
+
+    /// <summary>Die zuletzt geladenen Termine (für die Vorschau im Editor).</summary>
+    public IReadOnlyList<CalLine> CalendarLines { get; private set; } = [];
+    public event Action? CalendarChanged;
+
+    /// <summary>Startet das regelmässige Laden (alle 10 Minuten).</summary>
+    public void StartCalendar()
+    {
+        _calLoop ??= Task.Run(async () =>
+        {
+            while (!_cts.IsCancellationRequested)
+            {
+                try { await RefreshCalendarAsync(); }
+                catch (Exception ex) { Log.Warn($"Kalender: {ex.Message}"); }
+                try { await _calKick.WaitAsync(TimeSpan.FromMinutes(10), _cts.Token); }
+                catch (OperationCanceledException) { return; }
+            }
+        });
+    }
+
+    /// <summary>Lädt den Kalender bald neu (nach geänderter Adresse oder neuer Verbindung zum Gerät).</summary>
+    public void RefreshCalendarSoon()
+    {
+        if (_calKick.CurrentCount == 0) _calKick.Release();
+    }
+
+    /// <summary>Lädt den Kalender jetzt und schickt die Termine ans Gerät. Ohne Adresse werden die Termine geleert.</summary>
+    public async Task<(bool Ok, string? Error, int Count)> RefreshCalendarAsync()
+    {
+        var url = Settings.CalendarUrl;
+        if (url.Length == 0)
+        {
+            CalendarLines = [];
+            CalendarChanged?.Invoke();
+            Link.Send(Protocol.Cal([]));
+            return (true, null, 0);
+        }
+        var (lines, error) = await CalendarService.FetchAsync(url, _cts.Token);
+        if (lines == null)
+        {
+            Log.Warn($"Kalender: {error}");
+            return (false, error, CalendarLines.Count);      // die bisherigen Termine bleiben stehen
+        }
+        CalendarLines = lines;
+        Log.Info($"Kalender: {lines.Count} Termine");
+        CalendarChanged?.Invoke();
+        Link.Send(Protocol.Cal(lines));
+        return (true, null, lines.Count);
     }
 
     public IPlatform Platform { get; }
@@ -114,6 +170,7 @@ public sealed class AgentCore : IDisposable
 
     public void Dispose()
     {
+        _cts.Cancel();
         Link.Dispose();
         Platform.Dispose();
     }

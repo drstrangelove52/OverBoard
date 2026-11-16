@@ -40,6 +40,10 @@ public partial class SetupPanel : UserControl
         MqttHostLabel.Text = Strings.Get("setup.mqtt.host");
         MqttUserLabel.Text = Strings.Get("setup.mqtt.user");
         MqttPassLabel.Text = Strings.Get("setup.mqtt.pass");
+        CalLabel.Text = Strings.Get("cal.title");
+        CalHint.Text = Strings.Get("cal.hint");
+        CalUrlLabel.Text = Strings.Get("cal.url");
+        CalUrlBox.Watermark = Settings.CalendarUrl.Length > 0 ? Strings.Get("setup.secret.saved") : "";
         SaveButton.Content = Strings.Get("setup.save");
         var saved = Strings.Get("setup.secret.saved");
         // Leere Felder erklären sich selbst: was hier nicht steht, behält das Gerät so, wie es ist
@@ -71,8 +75,10 @@ public partial class SetupPanel : UserControl
         Settings.MqttHost = (MqttHostBox.Text ?? "").Trim();
         Settings.MqttUser = (MqttUserBox.Text ?? "").Trim();
         if (!string.IsNullOrEmpty(MqttPassBox.Text)) Settings.MqttPassword = MqttPassBox.Text;
+        var calChanged = !string.IsNullOrWhiteSpace(CalUrlBox.Text);
+        if (calChanged) Settings.CalendarUrl = CalUrlBox.Text!.Trim() == "-" ? "" : CalUrlBox.Text!.Trim();   // "-" entfernt den Kalender
         Settings.Save();
-        WifiPassBox.Text = HaTokenBox.Text = MqttPassBox.Text = "";
+        WifiPassBox.Text = HaTokenBox.Text = MqttPassBox.Text = CalUrlBox.Text = "";
         ApplyTexts();
 
         SaveButton.IsEnabled = false;
@@ -87,6 +93,12 @@ public partial class SetupPanel : UserControl
                 var (entities, error) = await HaClient.FetchAsync(Settings.HaUrl, Settings.HaToken);
                 if (entities != null) lines.Add(Strings.Format("ha.ok", entities.Count));
                 else { lines.Add(error ?? "?"); failed = true; }
+            }
+
+            if (Settings.CalendarUrl.Length > 0)
+            {
+                var (calOk, calError, calCount) = await _core.RefreshCalendarAsync();
+                if (calOk) lines.Add(Strings.Format("cal.ok", calCount)); else { lines.Add(calError ?? "?"); failed = true; }
             }
 
             var (pushed, pushError, skipped) = await _core.PushCredentialsAsync();

@@ -30,6 +30,8 @@ public sealed class PreviewOptions
     public bool ShowGrid = true;                          // gestrichelte Rasterzellen
     /// <summary>Echte Zustände (Quelle → Wert, z. B. aus Home Assistant und vom PC). Null = Beispielwerte zeigen.</summary>
     public IReadOnlyDictionary<string, string>? States;
+    /// <summary>Echte Termine für Kalender-Kacheln. Null = Beispieltermine.</summary>
+    public IReadOnlyList<OverBoardAgent.Core.CalLine>? Calendar;
     public Rect? Ghost;                                   // Zielposition beim Ziehen
     public bool GhostValid = true;
 }
@@ -161,7 +163,7 @@ public static class DisplayRenderer
         var pageIndex = Math.Clamp(options.Page, 0, cfg.Pages.Count - 1);
         var page = cfg.Pages[pageIndex];
         if (options.ShowGrid) AddGuides(root, page);
-        foreach (var tile in page.Tiles) AddTile(root, page, tile, th, cfg.Language, options.On.Contains(tile), options.States);
+        foreach (var tile in page.Tiles) AddTile(root, page, tile, th, cfg.Language, options.On.Contains(tile), options.States, options.Calendar);
         if (cfg.Pages.Count > 1) AddNav(root, cfg, pageIndex, th);
 
         if (options.Selected != null && page.Tiles.Contains(options.Selected)) AddSelection(root, TileRect(page, options.Selected));
@@ -211,7 +213,7 @@ public static class DisplayRenderer
     }
 
     private static void AddTile(Canvas root, PageModel page, TileModel t, ThemeColors th, string language, bool on,
-        IReadOnlyDictionary<string, string>? states)
+        IReadOnlyDictionary<string, string>? states, IReadOnlyList<OverBoardAgent.Core.CalLine>? calendar)
     {
         var rect = TileRect(page, t);
         // Echter Zustand, wenn bekannt; sonst (ohne Quelle oder ohne Verbindung) Beispielwerte
@@ -237,7 +239,11 @@ public static class DisplayRenderer
         var h = rect.Height;
         var title = t.Title.Get(language);
 
-        if (!t.IsButton)
+        if (t.IsCalendar)
+        {
+            AddCalendarTile(inner, t, th, language, w, h, title, calendar);
+        }
+        else if (!t.IsButton)
         {
             var narrow = w < 150;
             var titleSize = title.Length > 0 ? PutText(inner, title, TextFont, narrow ? 14 : 20, th.Title, _ => new Point(Pad, Pad))
@@ -268,6 +274,48 @@ public static class DisplayRenderer
             }
         }
     }
+
+    private const double CalRowH = 30;     // gleich wie in der Firmware (ui.c)
+
+    private static void AddCalendarTile(Canvas inner, TileModel t, ThemeColors th, string language, double w, double h, string title,
+        IReadOnlyList<OverBoardAgent.Core.CalLine>? calendar)
+    {
+        var narrow = w < 150;
+        var titleSize = title.Length > 0 ? PutText(inner, title, TextFont, narrow ? 14 : 20, th.Title, _ => new Point(Pad, Pad))
+                                         : Measure("Ag", TextFont, narrow ? 14 : 20);
+        if (t.Icon != null)
+            PutText(inner, MdiIcons.Glyph(t.Icon), IconFont, narrow ? 24 : 28, th.Title, s => new Point(w - Pad - s.Width, Pad));
+
+        var top = Pad + Math.Round(titleSize.Height) + 8;
+        var rows = Math.Max(1, (int)((h - Pad - top) / CalRowH));
+        var today = DateTime.Today;
+        var lines = calendar ?? SampleCalendar(today);
+        var whens = lines.Take(rows).Select(l => OverBoardAgent.Core.CalendarService.When(l, language, today)).ToList();
+        if (lines.Count == 0)
+        {
+            PutText(inner, language == "en" ? "No events" : "Keine Termine", TextFont, 20, th.Title, _ => new Point(Pad, top));
+            return;
+        }
+        var whenW = whens.Select(x => Measure(x, TextFont, 20).Width).DefaultIfEmpty(0).Max();
+        for (var i = 0; i < whens.Count; i++)
+        {
+            var y = top + i * CalRowH;
+            PutText(inner, whens[i], TextFont, 20, th.Accent, _ => new Point(Pad, y));
+            var label = Label(lines[i].Title, TextFont, 20, th.Value);
+            label.Width = Math.Max(10, w - 2 * Pad - whenW - 14);
+            label.TextTrimming = TextTrimming.CharacterEllipsis;
+            Put(inner, label, Pad + whenW + 14, y);
+        }
+    }
+
+    private static List<OverBoardAgent.Core.CalLine> SampleCalendar(DateTime today) =>
+    [
+        new(today.ToString("yyyy-MM-dd"), "18:30", "Elternabend"),
+        new(today.AddDays(1).ToString("yyyy-MM-dd"), "", "Geburtstag Oma"),
+        new(today.AddDays(2).ToString("yyyy-MM-dd"), "09:00", "Zahnarzt"),
+        new(today.AddDays(4).ToString("yyyy-MM-dd"), "19:00", "Training"),
+        new(today.AddDays(6).ToString("yyyy-MM-dd"), "", "Müllabfuhr"),
+    ];
 
     private static void AddNav(Canvas root, ConfigModel cfg, int active, ThemeColors th)
     {

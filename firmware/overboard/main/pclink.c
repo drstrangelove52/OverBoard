@@ -304,6 +304,24 @@ static void handle_line(const char *line)
         // Zustand des PCs vom Programm: {"t":"pc","away":true} (schlaeft, gesperrt, wird heruntergefahren) oder false
         const cJSON *away = cJSON_GetObjectItem(root, "away");
         if (cJSON_IsBool(away)) ui_set_pc_away(cJSON_IsTrue(away));
+    } else if (!strcmp(type, "cal")) {
+        // Kalendertermine vom PC-Programm: {"t":"cal","e":[["2026-11-17","18:30","Titel"],["2026-11-18","","Ganztaegig"]]}
+        const cJSON *arr = cJSON_GetObjectItem(root, "e");
+        if (cJSON_IsArray(arr)) {
+            cal_event_t ev[CAL_MAX];
+            int n = 0;
+            const cJSON *it;
+            cJSON_ArrayForEach(it, arr) {
+                if (n >= CAL_MAX || !cJSON_IsArray(it) || cJSON_GetArraySize(it) < 3) continue;
+                const cJSON *d = cJSON_GetArrayItem(it, 0), *tm = cJSON_GetArrayItem(it, 1), *ti = cJSON_GetArrayItem(it, 2);
+                if (!cJSON_IsString(d) || !cJSON_IsString(tm) || !cJSON_IsString(ti)) continue;
+                snprintf(ev[n].date, sizeof(ev[n].date), "%.10s", d->valuestring);
+                snprintf(ev[n].time, sizeof(ev[n].time), "%.5s", tm->valuestring);
+                snprintf(ev[n].title, sizeof(ev[n].title), "%.99s", ti->valuestring);
+                n++;
+            }
+            ui_set_calendar(ev, n);
+        }
     } else if (!strcmp(type, "sound")) {
         // Ton zum Ausprobieren der Lautstaerke: {"t":"sound","id":"click"|"info"|"ok"|"warn"|"alarm"}
         const cJSON *id = cJSON_GetObjectItem(root, "id");

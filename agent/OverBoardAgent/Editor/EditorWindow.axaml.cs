@@ -253,7 +253,7 @@ public partial class EditorWindow : Window
         OnBox.Content = T("In der Vorschau als „eingeschaltet“ zeigen", "Show as “on” in the preview");
         DeleteTileButton.Content = T("Kachel löschen", "Delete tile");
 
-        FillCombo(TypeBox, [T("Anzeige (Wert)", "Display (value)"), T("Taste", "Button")]);
+        FillCombo(TypeBox, [T("Anzeige (Wert)", "Display (value)"), T("Taste", "Button"), T("Kalender (Termine)", "Calendar (events)")]);
         FillCombo(FormatBox, FormatNames.Select(f => T(f.De, f.En)).ToList());
         FillCombo(TriggerBox, TriggerNames.Select(f => T(f.De, f.En)).ToList());
         FillCombo(LanguageBox, [T("Deutsch", "German"), T("Englisch", "English")]);
@@ -460,8 +460,9 @@ public partial class EditorWindow : Window
         // Kachel-Eigenschaften
         TypeBox.SelectionChanged += (_, _) => EditTile("type", t =>
         {
-            t.Type = TypeBox.SelectedIndex == 1 ? "button" : "value";
+            t.Type = TypeBox.SelectedIndex == 1 ? "button" : TypeBox.SelectedIndex == 2 ? "calendar" : "value";
             if (t.IsButton && t.Format == null) t.Format = "onoff";
+            if (t.IsCalendar && t.Icon == null) t.Icon = "calendar";
         }, panels: true);
         TitleDe.TextChanged += (_, _) => EditTile("td", t => t.Title = new LText(TitleDe.Text ?? "", TitleDe.Text ?? ""));
         IconBox.TextChanged += (_, _) => EditTile("icon", t => t.Icon = string.IsNullOrWhiteSpace(IconBox.Text) ? null : IconBox.Text, icon: true);
@@ -676,7 +677,7 @@ public partial class EditorWindow : Window
     private void Rebuild()
     {
         if (_cfg.Pages.Count == 0) return;
-        var options = new PreviewOptions { Page = _page, Selected = _sel, Ghost = _ghost, GhostValid = _ghostValid, States = CurrentStates() };
+        var options = new PreviewOptions { Page = _page, Selected = _sel, Ghost = _ghost, GhostValid = _ghostValid, States = CurrentStates(), Calendar = _core?.CalendarLines.Count > 0 || Settings.CalendarUrl.Length > 0 ? _core?.CalendarLines : null };
         foreach (var t in _on) options.On.Add(t);
         Host.Content = DisplayRenderer.Build(_cfg, options);
     }
@@ -762,16 +763,16 @@ public partial class EditorWindow : Window
             NoTileText.IsVisible = t == null;
             if (t == null) return;
 
-            TypeBox.SelectedIndex = t.IsButton ? 1 : 0;
+            TypeBox.SelectedIndex = t.IsButton ? 1 : t.IsCalendar ? 2 : 0;
             TitleDe.Text = t.Title.Get(_cfg.Language);
             IconBox.Text = t.Icon ?? "";
             IconPreview.Text = t.Icon != null ? MdiIcons.Glyph(t.Icon) : "";
             SourceBox.Text = t.Source ?? "";
             FormatBox.SelectedIndex = Array.IndexOf(FormatIds, t.EffectiveFormat);
             MaxBox.Value = (decimal?)(t.Max ?? 0);
-            MaxPanel.IsVisible = !t.IsButton && t.EffectiveFormat is "power" or "kwh" or "percent";
+            MaxPanel.IsVisible = !t.IsButton && !t.IsCalendar && t.EffectiveFormat is "power" or "kwh" or "percent";
+            SourceLabel.IsVisible = SourcePanelRow.IsVisible = FormatBox.IsVisible = FormatLabel.IsVisible = !t.IsCalendar;
             ButtonPanel.IsVisible = t.IsButton;
-            FormatLabel.IsVisible = FormatBox.IsVisible = !t.IsButton || true;
             TriggerBox.SelectedIndex = Array.IndexOf(TriggerIds, t.EffectiveTrigger);
             TileHoldBox.Value = t.HoldMs ?? 0;
             XBox.Value = t.X + 1;

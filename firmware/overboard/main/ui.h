@@ -11,6 +11,11 @@ void ui_reload(void);
 
 // Neuen Zustand einer HA-Entitaet anzeigen (thread-safe, darf aus jedem Task aufgerufen werden)
 void ui_set_entity(const char *entity_id, const char *state);
+
+// Kalender-Kacheln: die naechsten Termine vom PC-Programm (Datum "YYYY-MM-DD", Uhrzeit "HH:MM" oder "" = ganztaegig, Titel).
+#define CAL_MAX 8
+typedef struct { char date[11]; char time[6]; char title[100]; } cal_event_t;
+void ui_set_calendar(const cal_event_t *ev, int n);
 // Verbindungsstatus als Symbole oben rechts.
 void ui_set_status(bool wifi, bool ha);
 void ui_set_mqtt(bool connected);

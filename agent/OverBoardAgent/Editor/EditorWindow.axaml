@@ -92,7 +92,7 @@
                                         <Button x:Name="IconPickButton" Grid.Column="2" Content="…" />
                                     </Grid>
                                     <TextBlock x:Name="SourceLabel" FontSize="12" Opacity="0.7" />
-                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                    <Grid x:Name="SourcePanelRow" ColumnDefinitions="*,Auto" ColumnSpacing="8">
                                         <TextBox x:Name="SourceBox" />
                                         <Button x:Name="SourcePickButton" Grid.Column="1" Content="…" />
                                     </Grid>

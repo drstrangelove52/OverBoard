@@ -124,7 +124,7 @@ void config_free(ob_config_t *cfg)
 // ================================================================================================
 // Namen der Aufzaehlungen
 // ================================================================================================
-static const char *const k_type_names[] = { "value", "button" };
+static const char *const k_type_names[] = { "value", "button", "calendar" };
 static const char *const k_fmt_names[] = { "power", "kwh", "status", "onoff", "text", "percent", "time" };
 static const char *const k_trig_names[] = { "none", "tap", "hold", "confirm" };
 #define COUNT(a) ((int)(sizeof(a) / sizeof((a)[0])))
@@ -376,7 +376,7 @@ ob_config_t *config_parse(const char *json, size_t len, char *err, size_t err_le
 
             const cJSON *ty = cJSON_GetObjectItem(tj, "type");
             int type = cJSON_IsString(ty) ? find_name(ty->valuestring, k_type_names, COUNT(k_type_names)) : -1;
-            if (type < 0) FAIL("%s: 'type' muss \"value\" oder \"button\" sein", where);
+            if (type < 0) FAIL("%s: 'type' muss \"value\", \"button\" oder \"calendar\" sein", where);
             tc->type = (tile_type_t)type;
 
             int x, y, w, h;

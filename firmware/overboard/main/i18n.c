@@ -27,6 +27,11 @@ static const entry_t k_text[] = {
     // Ruhemodus
     { "idle.solar",            "Solar",      "Solar" },
     { "idle.house",            "Haus",       "House" },
+    // Kalender
+    { "cal.today",  "Heute",  "Today" },     { "cal.tomorrow", "Morgen", "Tomorrow" },
+    { "cal.none",   "Keine Termine", "No events" },
+    { "wds.0", "So", "Sun" }, { "wds.1", "Mo", "Mon" }, { "wds.2", "Di", "Tue" }, { "wds.3", "Mi", "Wed" },
+    { "wds.4", "Do", "Thu" }, { "wds.5", "Fr", "Fri" }, { "wds.6", "Sa", "Sat" },
     // Datum
     { "wd.0", "Sonntag",    "Sunday" },    { "wd.1", "Montag",   "Monday" },    { "wd.2", "Dienstag", "Tuesday" },
     { "wd.3", "Mittwoch",   "Wednesday" }, { "wd.4", "Donnerstag", "Thursday" }, { "wd.5", "Freitag", "Friday" },

@@ -84,6 +84,7 @@ public partial class App : Application
         var platform = Task.Run(() => new WindowsPlatform()).GetAwaiter().GetResult();
         _core = new AgentCore(platform, link, new ActionStore());
         link.ConnectionChanged += (_, _) => Dispatcher.UIThread.Post(RefreshTexts);
+        _core.StartCalendar();
 
         BuildTray();
         UpdateService.Changed += () => Dispatcher.UIThread.Post(RefreshTexts);

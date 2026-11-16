@@ -62,9 +62,15 @@ static const char *cache_get(const char *id)
     return NULL;
 }
 
+#define CAL_ROW_H 30                          // Zeilenhoehe der Kalender-Kachel (gleich wie in der Vorschau des PC-Programms)
+static cal_event_t s_cal[CAL_MAX];            // zuletzt gemeldete Termine (bleiben nach einem Neuaufbau der Oberflaeche)
+static int s_cal_n;
+
 typedef struct {
     const tile_cfg_t *cfg;
     lv_obj_t *obj, *value, *icon, *title, *bar;
+    lv_obj_t *cal_when[CAL_MAX], *cal_title[CAL_MAX];   // Kalender-Kachel: Zeilen mit Tag/Zeit und Titel
+    int cal_rows, cal_top, cal_w;
     int avail_w, avail_h;      // Platz fuer den Wert (Anzeige-Kachel)
     lv_timer_t *flash_timer;   // Rueckmeldung nach dem Druecken (Aufleuchten, Fehlerblinken)
     bool st_on, st_na;         // zuletzt bekannter Zustand, zum Wiederherstellen nach dem Aufleuchten
@@ -528,6 +534,90 @@ static void apply_state(tile_t *t, const char *state)
     if (t->cfg->fmt == FMT_ONOFF || t->cfg->type == TILE_BUTTON) style_onoff(t, state);
 }
 
+// ---- Kalender-Kachel ------------------------------------------------------------------------
+
+// Tage seit 1970-01-01 fuer ein Datum (Zivilkalender)
+static int64_t civil_days(int Y, int M, int D)
+{
+    int y = Y - (M <= 2);
+    int era = (y >= 0 ? y : y - 399) / 400;
+    int yoe = y - era * 400;
+    int doy = (153 * (M + (M > 2 ? -3 : 9)) + 2) / 5 + D - 1;
+    int doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return (int64_t)era * 146097 + doe - 719468;
+}
+
+// "Heute 18:30", "Morgen", "Mi 18.11. 09:00" (ohne gueltige Uhrzeit im Geraet nur "18.11.")
+static void cal_when(const cal_event_t *e, char *out, size_t n)
+{
+    int Y, M, D;
+    if (sscanf(e->date, "%d-%d-%d", &Y, &M, &D) != 3) {
+        snprintf(out, n, "%s", e->date);
+        return;
+    }
+    int64_t days = civil_days(Y, M, D);
+    time_t now = time(NULL);
+    char day[24];
+    if (now > 1700000000) {
+        struct tm lt_tm;
+        localtime_r(&now, &lt_tm);
+        int64_t diff = days - civil_days(lt_tm.tm_year + 1900, lt_tm.tm_mon + 1, lt_tm.tm_mday);
+        if (diff == 0) {
+            snprintf(day, sizeof(day), "%s", tr("cal.today"));
+        } else if (diff == 1) {
+            snprintf(day, sizeof(day), "%s", tr("cal.tomorrow"));
+        } else {
+            char key[12];
+            snprintf(key, sizeof(key), "wds.%d", (int)((days % 7 + 11) % 7));   // 1970-01-01 war ein Donnerstag
+            snprintf(day, sizeof(day), "%s %d.%d.", tr(key), D, M);
+        }
+    } else {
+        snprintf(day, sizeof(day), "%d.%d.", D, M);
+    }
+    if (e->time[0]) snprintf(out, n, "%s %s", day, e->time);
+    else snprintf(out, n, "%s", day);
+}
+
+static void cal_refresh(tile_t *t)
+{
+    if (t->cfg->type != TILE_CALENDAR) return;
+    char when[64];
+    int whenw = 0;
+    int shown = s_cal_n < t->cal_rows ? s_cal_n : t->cal_rows;
+    for (int i = 0; i < shown; i++) {                       // Breite der ersten Spalte = laengster Eintrag
+        cal_when(&s_cal[i], when, sizeof(when));
+        lv_point_t sz;
+        lv_text_get_size(&sz, when, ob_font(20), 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+        if (sz.x > whenw) whenw = sz.x;
+    }
+    if (whenw > t->cal_w * 2 / 3) whenw = t->cal_w * 2 / 3;
+    for (int i = 0; i < t->cal_rows; i++) {
+        if (i >= shown) {
+            lv_obj_add_flag(t->cal_when[i], LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(t->cal_title[i], LV_OBJ_FLAG_HIDDEN);
+            continue;
+        }
+        cal_when(&s_cal[i], when, sizeof(when));
+        int y = t->cal_top + i * CAL_ROW_H;
+        lv_label_set_text(t->cal_when[i], when);
+        lv_obj_set_pos(t->cal_when[i], 0, y);
+        lv_label_set_text(t->cal_title[i], s_cal[i].title);
+        lv_obj_set_width(t->cal_title[i], t->cal_w - whenw - 14);
+        lv_obj_set_pos(t->cal_title[i], whenw + 14, y);
+        lv_obj_remove_flag(t->cal_when[i], LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(t->cal_title[i], LV_OBJ_FLAG_HIDDEN);
+    }
+    if (shown == 0) {                                       // keine Termine: Hinweis in der ersten Zeile
+        lv_label_set_text(t->cal_title[0], tr("cal.none"));
+        lv_obj_set_width(t->cal_title[0], t->cal_w);
+        lv_obj_set_pos(t->cal_title[0], 0, t->cal_top);
+        lv_obj_set_style_text_color(t->cal_title[0], col(theme()->title), 0);
+        lv_obj_remove_flag(t->cal_title[0], LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_set_style_text_color(t->cal_title[0], col(theme()->value), 0);
+    }
+}
+
 static void build_tile(lv_obj_t *page, tile_t *t, int cell_h)
 {
     const theme_t *th = theme();
@@ -560,6 +650,27 @@ static void build_tile(lv_obj_t *page, tile_t *t, int cell_h)
         lv_text_get_size(&ts, lt(c->title), ob_font(narrow ? 14 : 20), 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
         t->avail_h = ph - 2 * PAD - (ts.y + (narrow ? 5 : 8));
         lv_obj_align(t->value, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+    } else if (c->type == TILE_CALENDAR) {
+        bool narrow = pw < 150;
+        t->title = make_label(o, ob_font(narrow ? 14 : 20), th->title, lt(c->title));
+        lv_obj_align(t->title, LV_ALIGN_TOP_LEFT, 0, 0);
+        if (c->icon) {
+            t->icon = make_icon(o, c->icon, narrow ? 24 : 28, th->title);
+            lv_obj_align(t->icon, LV_ALIGN_TOP_RIGHT, 0, 0);
+        }
+        lv_point_t ts;
+        lv_text_get_size(&ts, lt(c->title), ob_font(narrow ? 14 : 20), 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+        t->cal_top = ts.y + 8;
+        t->cal_w = pw - 2 * PAD;
+        t->cal_rows = (ph - 2 * PAD - t->cal_top) / CAL_ROW_H;
+        if (t->cal_rows < 1) t->cal_rows = 1;
+        if (t->cal_rows > CAL_MAX) t->cal_rows = CAL_MAX;
+        for (int i = 0; i < t->cal_rows; i++) {
+            t->cal_when[i] = make_label(o, ob_font(20), th->accent, "");
+            t->cal_title[i] = make_label(o, ob_font(20), th->value, "");
+            lv_label_set_long_mode(t->cal_title[i], LV_LABEL_LONG_DOT);
+        }
+        cal_refresh(t);
     } else {
         bool big = (c->w >= 2 && c->h >= 2);
         t->icon = make_icon(o, c->icon ? c->icon : "help-circle", big ? 64 : 48, th->value);
@@ -928,6 +1039,19 @@ void ui_reload(void)
 }
 
 // ---- Aktualisierung aus anderen Tasks -------------------------------------------------------
+
+void ui_set_calendar(const cal_event_t *ev, int n)
+{
+    if (!lvgl_port_lock(200)) {
+        ESP_LOGW(TAG, "LVGL-Sperre nicht erhalten, Kalender verworfen");
+        return;
+    }
+    s_cal_n = n > CAL_MAX ? CAL_MAX : n;
+    for (int i = 0; i < s_cal_n; i++) s_cal[i] = ev[i];
+    for (int i = 0; i < s_n_tiles; i++) cal_refresh(&s_tiles[i]);
+    lvgl_port_unlock();
+    ESP_LOGI(TAG, "Kalender: %d Termine", s_cal_n);
+}
 
 void ui_set_entity(const char *entity_id, const char *state)
 {

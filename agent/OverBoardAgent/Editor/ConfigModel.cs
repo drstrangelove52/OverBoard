@@ -56,7 +56,7 @@ public sealed class LTextConverter : JsonConverter<LText>
 
 public sealed class TileModel
 {
-    [JsonPropertyName("type"), JsonPropertyOrder(1)] public string Type { get; set; } = "button";   // value | button
+    [JsonPropertyName("type"), JsonPropertyOrder(1)] public string Type { get; set; } = "button";   // value | button | calendar
     [JsonPropertyName("x"), JsonPropertyOrder(2)] public int X { get; set; }
     [JsonPropertyName("y"), JsonPropertyOrder(3)] public int Y { get; set; }
     [JsonPropertyName("w"), JsonPropertyOrder(4)] public int W { get; set; } = 1;
@@ -71,6 +71,7 @@ public sealed class TileModel
     [JsonPropertyName("action"), JsonPropertyOrder(13)] public string? Action { get; set; }
 
     public bool IsButton => Type == "button";
+    public bool IsCalendar => Type == "calendar";
     public string EffectiveFormat => Format ?? (IsButton ? "onoff" : "text");
     public string EffectiveTrigger => Trigger ?? "none";
 
@@ -85,6 +86,7 @@ public sealed class TileModel
         if (string.IsNullOrWhiteSpace(Action)) Action = null;
         if (Max is <= 0) Max = null;
         if (HoldMs is <= 0) HoldMs = null;
+        if (IsCalendar) { Source = null; Format = null; Max = null; }
         if (!IsButton)
         {
             Trigger = null;
@@ -183,7 +185,7 @@ public static class ConfigValidator
     public const int MaxPages = 8;
     public const int MaxTiles = 48;
 
-    private static readonly string[] Types = ["value", "button"];
+    private static readonly string[] Types = ["value", "button", "calendar"];
     private static readonly string[] Formats = ["power", "kwh", "status", "onoff", "text", "percent", "time"];
     private static readonly string[] Triggers = ["none", "tap", "hold", "confirm"];
 
