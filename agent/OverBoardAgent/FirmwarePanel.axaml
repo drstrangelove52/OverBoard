@@ -2,7 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="OverBoardAgent.FirmwarePanel">
     <StackPanel Spacing="6">
-        <TextBlock x:Name="InstalledText" />
+        <TextBlock x:Name="InstalledText" TextWrapping="Wrap" />
         <Expander x:Name="AdvancedExpander" Margin="0,6,0,0">
             <StackPanel Spacing="6" Margin="0,6,0,0">
                 <TextBlock x:Name="SourceLabel" FontSize="12" Opacity="0.7" />

@@ -37,6 +37,11 @@ public partial class FirmwarePanel : UserControl
         BrowseButton.Click += async (_, _) => await BrowseAsync();
         InstallButton.Click += async (_, _) => await InstallAsync();
         _core.Link.ConnectionChanged += (_, _) => Dispatcher.UIThread.Post(UpdateInstalled);
+        // Kabel einstecken oder abziehen: die Anzeige folgt von selbst (nur solange das Fenster offen ist)
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+        timer.Tick += (_, _) => { if (!_busy) UpdateInstalled(); };
+        AttachedToVisualTree += (_, _) => timer.Start();
+        DetachedFromVisualTree += (_, _) => timer.Stop();
         SourceChanged();
     }
 
@@ -54,9 +59,14 @@ public partial class FirmwarePanel : UserControl
     {
         if (_core == null) return;
         var info = _core.Link.Device;
-        InstalledText.Text = _core.Link.IsConnected
-            ? Strings.Format("fw.installed", info?.Firmware ?? "?")
-            : Strings.Get("fw.installed.none");
+        if (_core.Link.IsConnected)
+        {
+            InstalledText.Text = Strings.Format("fw.installed", info?.Firmware ?? "?");
+            return;
+        }
+        // Nicht per USB 2.0 verbunden: zeigen, ob das Display wenigstens an der UART-Buchse hängt (dann lässt sich die Firmware installieren)
+        var uart = PortFinder.FindUartPorts();
+        InstalledText.Text = uart.Count > 0 ? Strings.Format("fw.installed.uart", uart[0]) : Strings.Get("fw.installed.none");
     }
 
     /// <summary>Vergleicht Versionen der Form v1.2.3 (ein Zusatz wie -dirty zählt nicht). null, wenn eine davon keine Versionsnummer ist.</summary>
