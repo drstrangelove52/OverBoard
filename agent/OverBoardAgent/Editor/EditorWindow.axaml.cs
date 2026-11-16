@@ -152,6 +152,23 @@ public partial class EditorWindow : Window
     private static decimal Minutes(int seconds) => Math.Round(seconds / 60m, 2);
     private static int Seconds(decimal minutes) => (int)Math.Round(minutes * 60m);
 
+    // Ablauf als Zeitstrahl, immer ab der letzten Berührung
+    private void UpdatePowerSummary()
+    {
+        static string M(int s) => Math.Round(s / 60m, 2).ToString("0.##");
+        var idle = _cfg.Idle.TimeoutS;
+        var de = $"Ablauf ab der letzten Berührung:  nach {M(idle)} Min Bildschirmschoner";
+        var en = $"Sequence from the last touch:  after {M(idle)} min screen saver";
+        if (_cfg.Idle.OffS > 0) { de += $"  →  nach {M(idle + _cfg.Idle.OffS)} Min Display aus"; en += $"  →  after {M(idle + _cfg.Idle.OffS)} min display off"; }
+        else { de += "  →  Display bleibt an"; en += "  →  display stays on"; }
+        if (_cfg.Power.PcAway)
+        {
+            de += $"{Environment.NewLine}Ist der PC weg: schon nach {M(_cfg.Power.PcAwayDelayS)} Min Display aus";
+            en += $"{Environment.NewLine}If the PC is away: display off after {M(_cfg.Power.PcAwayDelayS)} min";
+        }
+        PowerSummary.Text = T(de, en);
+    }
+
     private PageModel Page => _cfg.Pages[Math.Clamp(_page, 0, Math.Max(0, _cfg.Pages.Count - 1))];
 
     // ---- Texte ---------------------------------------------------------------------------------
@@ -175,9 +192,9 @@ public partial class EditorWindow : Window
         PowerHeader.Text = T("2 · Display ganz ausschalten (Strom sparen)", "2 · Switch the display off completely (save power)");
         PowerHint.Text = T("Sinnvoll, wenn das Gerät an einem USB-Anschluss mit dauerndem Strom hängt (Hub, Dockingstation). Das Gerät läuft weiter und empfängt Hinweise, nur die Hintergrundbeleuchtung ist aus.",
                            "Useful if the device is on a USB port that is always powered (hub, docking station). The device keeps running and receives notifications, only the backlight is off.");
-        OffMinLabel.Text = T("Ausschalten nach … Minuten im Bildschirmschoner (0 = nie)", "Switch off after … minutes in the screen saver (0 = never)");
-        PcAwayBox.Content = T("Früher ausschalten, wenn der PC schläft, gesperrt oder aus ist", "Switch off earlier when the PC sleeps, is locked or is off");
-        AwayDelayLabel.Text = T("… nach … Minuten ohne Berührung", "… after … minutes without touch");
+        OffMinLabel.Text = T("Display ausschalten nach weiteren … Minuten (0 = nie)", "Switch display off after a further … minutes (0 = never)");
+        PcAwayBox.Content = T("Wenn der PC schläft, gesperrt oder aus ist, Display schon früher ausschalten", "When the PC sleeps, is locked or is off, switch the display off sooner");
+        AwayDelayLabel.Text = T("… und zwar nach … Minuten ohne Berührung (statt Bildschirmschoner)", "… namely after … minutes without touch (instead of the screen saver)");
         SoundHeader.Text = T("Töne", "Sounds");
         SoundHint.Text = T("Die Lautstärke gilt für das Gerät. Mit den Testknöpfen hörst du das Ergebnis sofort (das Gerät muss verbunden sein).",
                            "The volume applies to the device. Use the test buttons to hear the result immediately (the device must be connected).");
@@ -720,6 +737,7 @@ public partial class EditorWindow : Window
             BrightnessBox.Value = _cfg.Brightness;
             HoldBox.Value = _cfg.HoldMs;
             IdleBox.Value = Minutes(_cfg.Idle.TimeoutS);
+            UpdatePowerSummary();
             IdleBrightBox.Value = _cfg.Idle.Brightness;
             IdleMoveBox.Value = Minutes(_cfg.Idle.MoveS);
             _cfg.Idle.Values ??= DefaultIdleValues();
@@ -889,6 +907,7 @@ public partial class EditorWindow : Window
         if (_suppress || _cfg.Pages.Count == 0) return;
         Touch(key);
         apply(_cfg);
+        UpdatePowerSummary();
         Changed(panels: key is "lang");
     }
 

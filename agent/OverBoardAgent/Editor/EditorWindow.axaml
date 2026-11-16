@@ -193,6 +193,7 @@
                             <StackPanel Spacing="6">
                                 <TextBlock x:Name="IdleHeader" FontWeight="SemiBold" />
                                 <TextBlock x:Name="IdleHint" FontSize="12" Opacity="0.65" TextWrapping="Wrap" />
+                                <Border Padding="10" CornerRadius="6" Background="#18808080" Margin="0,6,0,0"><TextBlock x:Name="PowerSummary" TextWrapping="Wrap" /></Border>
 
                                 <TextBlock x:Name="SaverHeader" FontWeight="SemiBold" Margin="0,12,0,0" />
                                 <TextBlock x:Name="IdleLabel" FontSize="12" Opacity="0.7" />
