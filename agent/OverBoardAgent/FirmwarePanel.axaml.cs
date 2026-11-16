@@ -13,7 +13,6 @@ public partial class FirmwarePanel : UserControl
     private AgentCore? _core;
     private FirmwarePackage? _package;
     private bool _busy;
-    private string? _bundledDir;
 
     public FirmwarePanel()
     {
@@ -25,16 +24,7 @@ public partial class FirmwarePanel : UserControl
     public void Init(AgentCore core)
     {
         _core = core;
-        // Die Firmware, die mit dem Programm kommt (Ordner "firmware" neben dem Programm), ist die Voreinstellung
-        var bundled = Path.Combine(AppContext.BaseDirectory, "firmware");
-        if (File.Exists(Path.Combine(bundled, "flasher_args.json"))) _bundledDir = bundled;
-        if (_bundledDir != null && (Settings.FirmwareDir.Length == 0 || !Directory.Exists(Settings.FirmwareDir))) Settings.FirmwareDir = _bundledDir;
-        SourceBox.Text = Settings.FirmwareDir;
-        // Mit mitgelieferter Firmware ist die Ordnerwahl nur für Entwickler: eingeklappt unter "Erweitert"
-        AdvancedExpander.IsExpanded = _bundledDir == null;
         ApplyTexts();
-        SourceBox.LostFocus += (_, _) => SourceChanged();
-        BrowseButton.Click += async (_, _) => await BrowseAsync();
         InstallButton.Click += async (_, _) => await InstallAsync();
         _core.Link.ConnectionChanged += (_, _) => Dispatcher.UIThread.Post(UpdateInstalled);
         // Kabel einstecken oder abziehen: die Anzeige folgt von selbst (nur solange das Fenster offen ist)
@@ -42,14 +32,11 @@ public partial class FirmwarePanel : UserControl
         timer.Tick += (_, _) => { if (!_busy) UpdateInstalled(); };
         AttachedToVisualTree += (_, _) => timer.Start();
         DetachedFromVisualTree += (_, _) => timer.Stop();
-        SourceChanged();
+        LoadBundled();
     }
 
     public void ApplyTexts()
     {
-        AdvancedExpander.Header = Strings.Get("fw.advanced");
-        SourceLabel.Text = Strings.Get("fw.source");
-        BrowseButton.Content = Strings.Get("fw.browse");
         InstallButton.Content = Strings.Get("fw.install");
         UpdateInstalled();
         UpdateAvailable();
@@ -104,36 +91,14 @@ public partial class FirmwarePanel : UserControl
         InstallButton.IsEnabled = _package != null && !_busy;
     }
 
-    private void SourceChanged()
+    /// <summary>Die Firmware, die zu diesem Programm gehört (Ordner "firmware" neben dem Programm).</summary>
+    private void LoadBundled()
     {
-        var dir = (SourceBox.Text ?? "").Trim();
-        Settings.FirmwareDir = dir;
-        Settings.Save();
-        _package = null;
-        if (dir.Length == 0)
-        {
-            AvailableText.Text = Strings.Get("fw.hint");
-        }
-        else
-        {
-            var (pkg, error) = FirmwareFlasher.LoadPackage(dir);
-            _package = pkg;
-            if (pkg == null) AvailableText.Text = error;
-        }
+        var dir = Path.Combine(AppContext.BaseDirectory, "firmware");
+        var (pkg, error) = FirmwareFlasher.LoadPackage(dir);
+        _package = pkg;
+        if (pkg == null) AvailableText.Text = Strings.Get("fw.missing");
         UpdateAvailable();
-    }
-
-    private async Task BrowseAsync()
-    {
-        if (Owner == null) return;
-        var folders = await Owner.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
-        {
-            AllowMultiple = false,
-            Title = Strings.Get("fw.source"),
-        });
-        if (folders.Count == 0) return;
-        SourceBox.Text = folders[0].TryGetLocalPath() ?? "";
-        SourceChanged();
     }
 
     private void Result(string text, bool error = false, bool ok = false)

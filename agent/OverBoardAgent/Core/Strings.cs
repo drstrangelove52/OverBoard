@@ -11,6 +11,7 @@ public static class Strings
         ["tray.editor"] = ("Display-Editor …", "Display editor …"),
         ["tray.actions"] = ("Aktionen …", "Actions …"),
         ["act.title"] = ("OverBoard Agent – Aktionen", "OverBoard Agent – Actions"),
+        ["fw.missing"] = ("In diesem Programm ist keine Firmware enthalten. Bitte das Programm neu installieren.", "This program does not contain any firmware. Please reinstall the program."),
         ["fw.installed"] = ("Auf dem Gerät installiert: {0}", "Installed on the device: {0}"),
         ["fw.installed.none"] = ("Kein Gerät erkannt. Zum Installieren der Firmware das Display mit der Buchse UART verbinden, für den normalen Betrieb mit USB 2.0.", "No device found. To install the firmware, connect the display to the UART socket; for normal use, to USB 2.0."),
         ["fw.installed.uart"] = ("Das Display ist an der UART-Buchse ({0}) erkannt, aber nicht per USB 2.0 mit dem Programm verbunden (oder noch ohne Firmware). Die Firmware kann jetzt installiert werden.", "The display is detected on the UART socket ({0}) but not connected to the program through USB 2.0 (or has no firmware yet). The firmware can be installed now."),

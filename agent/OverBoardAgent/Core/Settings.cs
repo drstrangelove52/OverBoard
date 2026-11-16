@@ -40,9 +40,6 @@ public static class Settings
     public static double WindowWidth { get; set; }
     public static double WindowHeight { get; set; }
 
-    /// <summary>Zuletzt gewählter Firmware-Ordner (ESP-IDF-Build mit flasher_args.json).</summary>
-    public static string FirmwareDir { get; set; } = "";
-
     /// <summary>Geheime Adresse eines Kalenders im iCal-Format (Google Kalender: Einstellungen, "Kalender integrieren"). Gilt wie ein Passwort.</summary>
     public static string CalendarUrl { get; set; } = "";
 
@@ -78,7 +75,6 @@ public static class Settings
             MqttHost = Str(r, "mqtt_host");
             MqttUser = Str(r, "mqtt_user");
             MqttPassword = Unprotect(Str(r, "mqtt_pass"));
-            FirmwareDir = Str(r, "firmware_dir");
             CalendarUrl = Unprotect(Str(r, "calendar_url"));
             if (r.TryGetProperty("window_w", out var ww) && ww.ValueKind == JsonValueKind.Number) WindowWidth = ww.GetDouble();
             if (r.TryGetProperty("window_h", out var wh) && wh.ValueKind == JsonValueKind.Number) WindowHeight = wh.GetDouble();
@@ -106,7 +102,6 @@ public static class Settings
                 mqtt_host = MqttHost,
                 mqtt_user = MqttUser,
                 mqtt_pass = Protect(MqttPassword),
-                firmware_dir = FirmwareDir,
                 calendar_url = Protect(CalendarUrl),
                 window_w = WindowWidth,
                 window_h = WindowHeight,

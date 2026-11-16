@@ -43,4 +43,15 @@
     <ItemGroup><PdbToDelete Include="$(PublishDir)*.pdb" /></ItemGroup>
     <Delete Files="@(PdbToDelete)" />
   </Target>
+
+  <!-- Entwicklung: ohne Release-Firmware die zuletzt gebaute Firmware (firmware/overboard/build) mitnehmen, damit Programm und Firmware zusammenpassen. -->
+  <PropertyGroup>
+    <DevFw>$(MSBuildThisFileDirectory)../../firmware/overboard/build/</DevFw>
+  </PropertyGroup>
+  <ItemGroup Condition="!Exists('firmware') And Exists('$(DevFw)flasher_args.json')">
+    <Content Include="$(DevFw)flasher_args.json" Link="firmware/flasher_args.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="$(DevFw)overboard.bin" Link="firmware/overboard.bin" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="$(DevFw)bootloader/bootloader.bin" Link="firmware/bootloader/bootloader.bin" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="$(DevFw)partition_table/partition-table.bin" Link="firmware/partition_table/partition-table.bin" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
