@@ -59,14 +59,34 @@ public partial class FirmwarePanel : UserControl
             : Strings.Get("fw.installed.none");
     }
 
+    /// <summary>Vergleicht Versionen der Form v1.2.3 (ein Zusatz wie -dirty zählt nicht). null, wenn eine davon keine Versionsnummer ist.</summary>
+    private static int? CompareVersions(string a, string b)
+    {
+        static Version? P(string v)
+        {
+            var m = System.Text.RegularExpressions.Regex.Match(v, @"^v?(\d+)\.(\d+)\.(\d+)");
+            return m.Success ? new Version(int.Parse(m.Groups[1].Value), int.Parse(m.Groups[2].Value), int.Parse(m.Groups[3].Value)) : null;
+        }
+        var x = P(a); var y = P(b);
+        return x == null || y == null ? null : x.CompareTo(y);
+    }
+
     private void UpdateAvailable()
     {
         if (_package != null)
         {
             var text = Strings.Format("fw.available", _package.Version ?? "?", _package.BuiltAt ?? "?");
             var installed = _core?.Link.Device?.Firmware;
-            if (installed != null && _package.Version != null && !string.Equals(installed.TrimStart('v'), _package.Version.TrimStart('v'), StringComparison.OrdinalIgnoreCase))
-                text += "  " + Strings.Get("fw.differs");
+            if (installed != null && _package.Version != null)
+            {
+                var cmp = CompareVersions(_package.Version, installed);
+                if (cmp is null)
+                {
+                    if (!string.Equals(installed.TrimStart('v'), _package.Version.TrimStart('v'), StringComparison.OrdinalIgnoreCase))
+                        text += "  " + Strings.Get("fw.differs");
+                }
+                else text += "  " + Strings.Get(cmp > 0 ? "fw.newer" : cmp < 0 ? "fw.older" : "fw.same");
+            }
             if (_core?.Link.Device is { ProtocolMatches: false })
                 text += "  " + Strings.Get("fw.protocol");
             AvailableText.Text = text;
@@ -124,7 +144,7 @@ public partial class FirmwarePanel : UserControl
             return;
         }
         var port = ports[0];
-        if (!await ConfirmAsync(Strings.Format("fw.confirm", _package.Version ?? "?", port))) return;
+        if (!await ConfirmAsync(Strings.Format("fw.confirm", _package.Version ?? "?", port, _core?.Link.Device?.Firmware ?? "?", _package.BuiltAt ?? "?"))) return;
 
         _busy = true;
         UpdateAvailable();
