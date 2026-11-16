@@ -29,4 +29,18 @@
   <ItemGroup>
     <Content Include="firmware\**\*" CopyToOutputDirectory="PreserveNewest" Condition="Exists('firmware')" />
   </ItemGroup>
+  <!-- Schlanke Veröffentlichung: nur die .NET-Teile, die gebraucht werden (eigene Programmteile bleiben unangetastet), ohne Debug-Dateien. -->
+  <PropertyGroup Condition="'$(PublishTrimmed)' == 'true'">
+    <TrimMode>partial</TrimMode>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+  <Target Name="DropPdbFromPublish" AfterTargets="Publish" Condition="'$(PublishTrimmed)' == 'true'">
+    <ItemGroup><PdbToDelete Include="$(PublishDir)*.pdb" /></ItemGroup>
+    <Delete Files="@(PdbToDelete)" />
+  </Target>
 </Project>

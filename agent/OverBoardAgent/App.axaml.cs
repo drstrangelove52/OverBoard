@@ -168,6 +168,16 @@ public partial class App : Application
         RefreshTexts();
     }
 
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern bool SetProcessWorkingSetSize(IntPtr process, IntPtr min, IntPtr max);
+
+    /// <summary>Gibt nicht benutzten Arbeitsspeicher an Windows zurück (-1/-1 = Arbeitssatz leeren).</summary>
+    private static void TrimWorkingSet()
+    {
+        try { SetProcessWorkingSetSize(System.Diagnostics.Process.GetCurrentProcess().Handle, (IntPtr)(-1), (IntPtr)(-1)); }
+        catch { /* nur eine Optimierung */ }
+    }
+
     /// <summary>Öffnet das Hauptfenster (oder holt es nach vorn).</summary>
     public void OpenMain(int page = 0)
     {
@@ -175,7 +185,18 @@ public partial class App : Application
         if (_mainWin == null)
         {
             _mainWin = new Editor.EditorWindow(_core);
-            _mainWin.Closed += (_, _) => _mainWin = null;
+            _mainWin.Closed += (_, _) =>
+            {
+                _mainWin = null;
+                // Fenster zu: dessen Speicher freigeben, damit der Agent im Tray schlank bleibt
+                Task.Run(async () =>
+                {
+                    await Task.Delay(1500);
+                    GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+                    GC.WaitForPendingFinalizers();
+                    TrimWorkingSet();
+                });
+            };
             _mainWin.Show();
         }
         else if (page != 0)
