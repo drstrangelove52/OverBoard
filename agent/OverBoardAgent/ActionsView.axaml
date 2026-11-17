@@ -16,8 +16,6 @@
                                         <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
                                         <TextBlock Text="{Binding Summary}" FontSize="12" Opacity="0.65" />
                                     </StackPanel>
-                                    <TextBlock Grid.Column="1" Text="{Binding Reference}" FontFamily="Consolas"
-                                               VerticalAlignment="Center" Opacity="0.8" />
                                 </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>

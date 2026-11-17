@@ -20,6 +20,10 @@ public static class BuiltinActions
         new("media.next", "Medien: Nächster Titel", "Media: next track", Keys: "MediaNext"),
         new("media.prev", "Medien: Vorheriger Titel", "Media: previous track", Keys: "MediaPrev"),
         new("media.stop", "Medien: Stopp", "Media: stop", Keys: "MediaStop"),
+        // Radio (Radio-Player im Programm)
+        new("radio.toggle", "Radio: Start / Stopp", "Radio: play / stop"),
+        new("radio.next", "Radio: nächster Sender", "Radio: next station"),
+        new("radio.prev", "Radio: vorheriger Sender", "Radio: previous station"),
         // Fenster
         new("desktop.show", "Desktop anzeigen", "Show desktop", Keys: "Win+D"),
         new("taskview", "Aufgabenansicht", "Task view", Keys: "Win+Tab"),

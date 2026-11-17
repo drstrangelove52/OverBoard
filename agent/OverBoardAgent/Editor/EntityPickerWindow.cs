@@ -17,9 +17,12 @@ public sealed class EntityPickerWindow : Window
     private readonly TextBlock _info;
     private readonly Button _ok;
     private IReadOnlyList<HaEntity> _all = [];
+    private readonly IReadOnlyList<HaEntity> _pc;
 
-    public EntityPickerWindow()
+    /// <param name="pcValues">Werte des PCs (Lautstärke, Stumm, Mikrofon), die immer ganz oben angeboten werden, auch ohne Home Assistant.</param>
+    public EntityPickerWindow(IReadOnlyList<HaEntity>? pcValues = null)
     {
+        _pc = pcValues ?? [];
         Title = Strings.Get("ent.title");
         Width = 760;
         Height = 640;
@@ -84,6 +87,13 @@ public sealed class EntityPickerWindow : Window
 
     private async Task LoadAsync(bool force)
     {
+        if (string.IsNullOrWhiteSpace(Settings.HaToken) || string.IsNullOrWhiteSpace(Settings.HaUrl))
+        {
+            _all = [];
+            Fill();                       // ohne Home Assistant gibt es trotzdem die Werte des PCs
+            _info.Text = Strings.Get("ent.pc.only") + "  " + _info.Text;
+            return;
+        }
         if (!force && HaClient.Cached is { } cached)
         {
             _all = cached;
@@ -106,9 +116,10 @@ public sealed class EntityPickerWindow : Window
     private void Fill()
     {
         var q = (_search.Text ?? "").Trim().ToLowerInvariant();
+        var source = _pc.Concat(_all).ToList();
         var matches = q.Length == 0
-            ? _all.ToList()
-            : _all.Where(e => e.Id.Contains(q, StringComparison.Ordinal) || e.Name.Contains(q, StringComparison.OrdinalIgnoreCase)).ToList();
+            ? source
+            : source.Where(e => e.Id.Contains(q, StringComparison.Ordinal) || e.Name.Contains(q, StringComparison.OrdinalIgnoreCase)).ToList();
         var fresh = MakeList(matches.Take(MaxShown).ToList());
         _grid.Children.Remove(_list);
         _list = fresh;

@@ -56,7 +56,7 @@ public sealed class LTextConverter : JsonConverter<LText>
 
 public sealed class TileModel
 {
-    [JsonPropertyName("type"), JsonPropertyOrder(1)] public string Type { get; set; } = "button";   // value | button | calendar
+    [JsonPropertyName("type"), JsonPropertyOrder(1)] public string Type { get; set; } = "button";   // value | button | calendar | radio
     [JsonPropertyName("x"), JsonPropertyOrder(2)] public int X { get; set; }
     [JsonPropertyName("y"), JsonPropertyOrder(3)] public int Y { get; set; }
     [JsonPropertyName("w"), JsonPropertyOrder(4)] public int W { get; set; } = 1;
@@ -72,6 +72,7 @@ public sealed class TileModel
 
     public bool IsButton => Type == "button";
     public bool IsCalendar => Type == "calendar";
+    public bool IsRadio => Type == "radio";
     public string EffectiveFormat => Format ?? (IsButton ? "onoff" : "text");
     public string EffectiveTrigger => Trigger ?? "none";
 
@@ -86,8 +87,12 @@ public sealed class TileModel
         if (string.IsNullOrWhiteSpace(Action)) Action = null;
         if (Max is <= 0) Max = null;
         if (HoldMs is <= 0) HoldMs = null;
-        if (IsCalendar) { Source = null; Format = null; Max = null; }
-        if (!IsButton)
+        // Stumm-Tasten leuchten von selbst nach dem Zustand, den sie umschalten (auch ältere Tasten ohne Quelle)
+        if (IsButton && Source == null)
+            Source = Action switch { "pc:mute.toggle" => "pc:mute", "pc:mic.toggle" => "pc:mic_mute", _ => null };
+        if (IsCalendar || IsRadio) { Source = null; Format = null; Max = null; }
+        if (IsRadio) { Trigger = "tap"; Action ??= "pc:radio.toggle"; HoldMs = null; }
+        else if (!IsButton)
         {
             Trigger = null;
             HoldMs = null;
@@ -185,9 +190,9 @@ public static class ConfigValidator
     public const int MaxPages = 8;
     public const int MaxTiles = 48;
 
-    private static readonly string[] Types = ["value", "button", "calendar"];
+    private static readonly string[] Types = ["value", "button", "calendar", "radio"];
     private static readonly string[] Formats = ["power", "kwh", "status", "onoff", "text", "percent", "time"];
-    private static readonly string[] Triggers = ["none", "tap", "hold", "confirm"];
+    private static readonly string[] Triggers = ["none", "tap", "hold", "confirm", "repeat"];
 
     public static List<string> Validate(ConfigModel c)
     {

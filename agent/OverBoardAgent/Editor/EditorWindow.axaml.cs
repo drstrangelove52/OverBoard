@@ -24,10 +24,10 @@ public partial class EditorWindow : Window
         ("An / Aus", "On / Off"), ("Text", "Text"), ("Prozent", "Percent"), ("Uhrzeit", "Time"),
     ];
 
-    private static readonly string[] TriggerIds = ["none", "tap", "hold", "confirm"];
+    private static readonly string[] TriggerIds = ["none", "tap", "hold", "confirm", "repeat"];
     private static readonly (string De, string En)[] TriggerNames =
     [
-        ("Keine Aktion", "No action"), ("Antippen", "Tap"), ("Gedrückt halten", "Press and hold"), ("Antippen und bestätigen", "Tap and confirm"),
+        ("Keine Aktion", "No action"), ("Antippen", "Tap"), ("Gedrückt halten", "Press and hold"), ("Antippen und bestätigen", "Tap and confirm"), ("Gedrückt halten wiederholt", "Hold to repeat"),
     ];
 
     // Werte im Ruhemodus: zwei Plätze
@@ -81,6 +81,7 @@ public partial class EditorWindow : Window
         BuildIdleValues();
         BuildNav();
         ActionsPage.Init(core);
+        RadioPage.Init(core);
         ActionsPage.UsedBy = ActionUsage;
         SetupPage.Init(core);
         FirmwarePage.Init(core);
@@ -121,6 +122,7 @@ public partial class EditorWindow : Window
             _core.Actions.Changed -= OnActionsChanged;
             _core.Link.ConnectionChanged -= OnConnectionChanged;
             ActionsPage.Detach();
+            RadioPage.Detach();
         };
         _core.Actions.Changed += OnActionsChanged;
     }
@@ -151,6 +153,14 @@ public partial class EditorWindow : Window
     // Zeiten stehen im Gerät in Sekunden, in der Oberfläche überall in Minuten (0,5 = 30 Sekunden)
     private static decimal Minutes(int seconds) => Math.Round(seconds / 60m, 2);
     private static int Seconds(decimal minutes) => (int)Math.Round(minutes * 60m);
+
+    // Das Radio-Logo wird auf die Kachelfarbe des gewählten Designs gesetzt
+    private void SyncRadioTheme()
+    {
+        if (_core == null || _core.Radio.Theme == _cfg.Theme) return;
+        _core.Radio.Theme = _cfg.Theme;
+        _core.Radio.PushToDevice();
+    }
 
     // Ablauf als Zeitstrahl, immer ab der letzten Berührung
     private void UpdatePowerSummary()
@@ -208,6 +218,8 @@ public partial class EditorWindow : Window
         RedoButton.Content = T("↷ Wiederholen", "↷ Redo");
         SendButton.Content = T("Jetzt senden", "Send now");
         LiveBox.Content = T("Live auf das Gerät", "Live to device");
+        DemoBox.Content = T("Vorführmodus (Kacheln bedienen)", "Demo mode (operate tiles)");
+        ToolTip.SetTip(DemoBox, T("Ein Klick auf eine Taste löst sie aus, wie eine Berührung am Display. Das Raster und die Auswahl sind ausgeblendet.", "A click on a button triggers it, like touching the display. The grid and the selection are hidden."));
         RealValuesBox.Content = T("Echte Werte anzeigen", "Show real values");
         LoadButton.Content = T("Vom Gerät laden", "Load from device");
         OpenFileButton.Content = T("Laden …", "Load …");
@@ -239,12 +251,17 @@ public partial class EditorWindow : Window
         TypeLabel.Text = T("Art", "Type");
         TitleDeLabel.Text = T("Titel", "Title");
         IconLabel.Text = T("Symbol (Name tippen, z. B. lightbulb)", "Icon (type a name, e.g. lightbulb)");
-        SourceLabel.Text = T("Datenquelle: HA-Entität (z. B. sensor.xyz) oder pc:volume / pc:mute / pc:mic_mute",
-                             "Data source: HA entity (e.g. sensor.xyz) or pc:volume / pc:mute / pc:mic_mute");
+        SourceKindLabel.Text = T("Datenquelle", "Data source");
+        ButtonModeLabel.Text = T("Was die Taste tut", "What the button does");
+        FillCombo(ButtonModeBox, [T("Aktion auf dem PC ausführen", "Run an action on the PC"), T("Home-Assistant-Entität umschalten", "Toggle a Home Assistant entity")]);
+        AdvLightBox.Content = T("Erweitert: leuchtet nach einem anderen Zustand", "Advanced: lights up for a different state");
+        SourceLabel.Text = T("Home-Assistant-Entität (z. B. sensor.xyz)", "Home Assistant entity (e.g. sensor.xyz)");
+        FillCombo(SourceKindBox, [T("PC", "PC"), T("Home Assistant", "Home Assistant")]);
+        FillCombo(PcSourceBox, PcSources.Select(p => T(p.De, p.En)).ToList());
         FormatLabel.Text = T("Darstellung", "Format");
         MaxLabel.Text = T("Höchstwert (z. B. für Balken, 0 = keiner)", "Maximum (0 = none)");
         TriggerLabel.Text = T("Bedienung", "Operation");
-        ActionLabel.Text = T("Aktion auf dem PC", "PC action");
+        ActionLabel.Text = T("Dann ausführen (Aktion auf dem PC)", "Then run (action on the PC)");
         NewActionButton.Content = T("Neue eigene Aktion …", "New custom action …");
         TileHoldLabel.Text = T("Haltedauer dieser Taste (ms, 0 = allgemeine)", "Hold time of this button (ms, 0 = global)");
         GeometryLabel.Text = T("Position und Grösse: Spalte, Reihe, Breite, Höhe", "Position and size: column, row, width, height");
@@ -253,7 +270,7 @@ public partial class EditorWindow : Window
         OnBox.Content = T("In der Vorschau als „eingeschaltet“ zeigen", "Show as “on” in the preview");
         DeleteTileButton.Content = T("Kachel löschen", "Delete tile");
 
-        FillCombo(TypeBox, [T("Anzeige (Wert)", "Display (value)"), T("Taste", "Button"), T("Kalender (Termine)", "Calendar (events)")]);
+        FillCombo(TypeBox, [T("Anzeige (Wert)", "Display (value)"), T("Taste", "Button"), T("Kalender (Termine)", "Calendar (events)"), T("Radio (Player)", "Radio (player)")]);
         FillCombo(FormatBox, FormatNames.Select(f => T(f.De, f.En)).ToList());
         FillCombo(TriggerBox, TriggerNames.Select(f => T(f.De, f.En)).ToList());
         FillCombo(LanguageBox, [T("Deutsch", "German"), T("Englisch", "English")]);
@@ -268,7 +285,43 @@ public partial class EditorWindow : Window
         _idleIntro!.Text = T("Im Ruhemodus werden unter der Uhr bis zu zwei Werte angezeigt.", "In idle mode up to two values are shown below the clock.");
     }
 
-    private static string? GuessFormat(HaEntity e) => e.DeviceClass == "timestamp" ? "time" : e.Unit switch
+    // Werte des PCs, die eine Anzeige-Kachel zeigen kann (Kennung ohne "pc:", Namen, passende Darstellung)
+    private static readonly (string Id, string De, string En, string Format)[] PcSources =
+    [
+        ("volume", "Lautstärke", "Volume", "percent"),
+        ("mute", "Stumm", "Muted", "onoff"),
+        ("mic_mute", "Mikrofon stumm", "Microphone muted", "onoff"),
+    ];
+
+    // Arten der Datenquelle: Tasten haben zusätzlich "Keine" (die Taste löst nur etwas aus und leuchtet nie)
+    private string[] _srcKinds = ["pc", "ha"];
+
+    private static string[] KindsFor(TileModel t) => t.IsButton ? ["none", "pc", "ha"] : ["pc", "ha"];
+
+    private static string KindText(string kind) => kind switch
+    {
+        "none" => T("Keine", "None"),
+        "pc" => T("PC", "PC"),
+        _ => T("Home Assistant", "Home Assistant"),
+    };
+
+    // Tasten, bei denen "Erweitert: leuchtet nach einem anderen Zustand" aufgeklappt ist
+    private readonly HashSet<TileModel> _advTiles = [];
+
+    // Tasten, die gerade auf "Home-Assistant-Entität umschalten" stehen, aber noch keine Entität haben
+    private readonly HashSet<TileModel> _haModeTiles = [];
+
+    // Stumm-Tasten leuchten von selbst nach dem Zustand, den sie umschalten
+    private static string? AutoSource(string? action) => action switch
+    {
+        "pc:mute.toggle" => "pc:mute",
+        "pc:mic.toggle" => "pc:mic_mute",
+        _ => null,
+    };
+
+    private static bool IsPcSource(string? source) => source != null && source.StartsWith("pc:", StringComparison.Ordinal);
+
+    private static string? GuessFormat(HaEntity e) => e.Id is "pc:mute" or "pc:mic_mute" ? "onoff" : e.DeviceClass == "timestamp" ? "time" : e.Unit switch
     {
         "W" or "kW" => "power",
         "kWh" or "Wh" => "kwh",
@@ -277,15 +330,24 @@ public partial class EditorWindow : Window
     };
 
     /// <summary>Öffnet die Entitäten-Auswahl, oder weist auf die fehlenden Zugangsdaten hin.</summary>
-    private async Task<HaEntity?> PickEntityAsync()
+    private async Task<HaEntity?> PickEntityAsync(bool withPc = true)
     {
-        if (string.IsNullOrWhiteSpace(Settings.HaToken) || string.IsNullOrWhiteSpace(Settings.HaUrl))
+        if (!withPc && (string.IsNullOrWhiteSpace(Settings.HaToken) || string.IsNullOrWhiteSpace(Settings.HaUrl)))
         {
             Status(Strings.Get("ha.err.token"), error: true);
             ShowPage(2);                     // Seite "Gerät": dort sind Adresse und Token
             return null;
         }
-        return await new EntityPickerWindow().ShowDialog<HaEntity?>(this);
+        // Werte des PCs stehen immer zur Wahl, Home-Assistant-Entitäten zusätzlich, wenn Home Assistant eingerichtet ist
+        var states = _core?.Platform.GetStates() ?? new Dictionary<string, string>();
+        string S(string id) => states.TryGetValue(id, out var v) ? v : "";
+        var pc = new List<HaEntity>
+        {
+            new("pc:volume", T("PC: Lautstärke", "PC: volume"), S("volume"), "%", ""),
+            new("pc:mute", T("PC: Stumm", "PC: muted"), S("mute"), "", ""),
+            new("pc:mic_mute", T("PC: Mikrofon stumm", "PC: microphone muted"), S("mic_mute"), "", ""),
+        };
+        return await new EntityPickerWindow(withPc ? pc : null).ShowDialog<HaEntity?>(this);
     }
 
     private void BuildIdleValues()
@@ -371,6 +433,7 @@ public partial class EditorWindow : Window
         SendButton.Click += async (_, _) => await SendAsync(auto: false);
         RealValuesBox.IsCheckedChanged += async (_, _) => { _realValuesOn = RealValuesBox.IsChecked == true; await RefreshValuesAsync(); Rebuild(); };
         LiveBox.IsCheckedChanged += (_, _) => { if (LiveBox.IsChecked == true && _dirty) ScheduleSend(); };
+        DemoBox.IsCheckedChanged += (_, _) => { _drag = Drag.None; Rebuild(); };
         LoadButton.Click += async (_, _) => await LoadFromDeviceAsync();
         OpenFileButton.Click += async (_, _) => await OpenFileAsync();
         SaveFileButton.Click += async (_, _) => await SaveFileAsync();
@@ -378,7 +441,7 @@ public partial class EditorWindow : Window
         JsonButton.Click += async (_, _) => await ShowJsonAsync();
         SourcePickButton.Click += async (_, _) =>
         {
-            var e = await PickEntityAsync();
+            var e = await PickEntityAsync(withPc: false);
             if (e == null || _sel == null) return;
             SourceBox.Text = e.Id;      // löst die normale Übernahme aus
             // leere Felder sinnvoll vorbelegen: Titel aus dem Namen, Darstellung aus der Einheit
@@ -413,6 +476,7 @@ public partial class EditorWindow : Window
             _page = PageList.SelectedIndex;
             _sel = null;
             Refresh(panels: true);
+            if (LiveBox.IsChecked == true) { Log.Info($"Seite {_page + 1} ans Gerät"); _core?.Link.Send(Protocol.Page(_page)); }     // das Display zeigt dieselbe Seite
         };
         AddPageButton.Click += (_, _) => AddPage();
         DeletePageButton.Click += (_, _) => DeletePage();
@@ -460,13 +524,72 @@ public partial class EditorWindow : Window
         // Kachel-Eigenschaften
         TypeBox.SelectionChanged += (_, _) => EditTile("type", t =>
         {
-            t.Type = TypeBox.SelectedIndex == 1 ? "button" : TypeBox.SelectedIndex == 2 ? "calendar" : "value";
+            t.Type = TypeBox.SelectedIndex switch { 1 => "button", 2 => "calendar", 3 => "radio", _ => "value" };
             if (t.IsButton && t.Format == null) t.Format = "onoff";
             if (t.IsCalendar && t.Icon == null) t.Icon = "calendar";
+            if (t.IsRadio)
+            {
+                t.Trigger = "tap";
+                t.Action ??= "pc:radio.toggle";
+                // Eine Radio-Kachel braucht Platz für Logo und Titel: wenn möglich auf 4 x 2 vergrössern
+                var rw = Math.Max(t.W, 4);
+                var rh = Math.Max(t.H, 2);
+                if ((rw != t.W || rh != t.H) && ConfigValidator.Fits(Page, t, t.X, t.Y, rw, rh)) { t.W = rw; t.H = rh; }
+            }
         }, panels: true);
         TitleDe.TextChanged += (_, _) => EditTile("td", t => t.Title = new LText(TitleDe.Text ?? "", TitleDe.Text ?? ""));
         IconBox.TextChanged += (_, _) => EditTile("icon", t => t.Icon = string.IsNullOrWhiteSpace(IconBox.Text) ? null : IconBox.Text, icon: true);
         SourceBox.TextChanged += (_, _) => EditTile("src", t => t.Source = SourceBox.Text);
+        ButtonModeBox.SelectionChanged += (_, _) => EditTile("btnmode", t =>
+        {
+            if (ButtonModeBox.SelectedIndex == 1)
+            {
+                t.Action = null;                                     // die Entität selbst wird umgeschaltet
+                if (IsPcSource(t.Source)) t.Source = null;
+                _advTiles.Remove(t);
+                _haModeTiles.Add(t);
+            }
+            else
+            {
+                _haModeTiles.Remove(t);
+                t.Source = AutoSource(t.Action);                     // PC-Aktion: eine Home-Assistant-Entität gehört nicht mehr dazu
+            }
+        }, panels: true);
+        AdvLightBox.IsCheckedChanged += (_, _) => EditTile("adv", t =>
+        {
+            if (AdvLightBox.IsChecked == true) _advTiles.Add(t);
+            else
+            {
+                _advTiles.Remove(t);
+                t.Source = AutoSource(t.Action);
+            }
+        }, panels: true);
+        SourceKindBox.SelectionChanged += (_, _) => EditTile("srckind", t =>
+        {
+            if (SourceKindBox.SelectedIndex < 0 || SourceKindBox.SelectedIndex >= _srcKinds.Length) return;
+            switch (_srcKinds[SourceKindBox.SelectedIndex])
+            {
+                case "pc":
+                    var p = PcSources[Math.Max(0, PcSourceBox.SelectedIndex)];
+                    t.Source = "pc:" + p.Id;
+                    if (!t.IsButton) t.Format = p.Format;
+                    break;
+                case "ha":
+                    if (IsPcSource(t.Source)) t.Source = null;       // zurück zu Home Assistant: die PC-Quelle fällt weg
+                    break;
+                default:
+                    t.Source = null;                                  // keine Quelle: die Taste leuchtet nicht
+                    break;
+            }
+        }, panels: true);
+        PcSourceBox.SelectionChanged += (_, _) => EditTile("pcsrc", t =>
+        {
+            if (PcSourceBox.SelectedIndex < 0) return;
+            var p = PcSources[PcSourceBox.SelectedIndex];
+            t.Source = "pc:" + p.Id;
+            if (!t.IsButton) t.Format = p.Format;
+            if (string.IsNullOrWhiteSpace(t.Title.De) && string.IsNullOrWhiteSpace(t.Title.En)) t.Title = new LText(T(p.De, p.En), T(p.De, p.En));
+        }, panels: true);
         FormatBox.SelectionChanged += (_, _) => EditTile("fmt", t => { if (FormatBox.SelectedIndex >= 0) t.Format = FormatIds[FormatBox.SelectedIndex]; });
         MaxBox.ValueChanged += (_, _) => EditTile("max", t => t.Max = (double?)MaxBox.Value);
         TriggerBox.SelectionChanged += (_, _) => EditTile("trig", t => { if (TriggerBox.SelectedIndex >= 0) t.Trigger = TriggerIds[TriggerBox.SelectedIndex]; });
@@ -474,13 +597,22 @@ public partial class EditorWindow : Window
         {
             if (ActionBox.SelectedItem is not ActionChoice c) return;
             t.Action = c.Id;
+            // Stumm-Tasten leuchten von selbst nach dem Zustand, den sie umschalten; bei anderen Aktionen fällt er wieder weg
+            if (t.IsButton && !_advTiles.Contains(t) && (string.IsNullOrWhiteSpace(t.Source) || t.Source is "pc:mute" or "pc:mic_mute"))
+                t.Source = AutoSource(c.Id);
+            // Lauter und Leiser: bei gedrückt gehaltener Taste weiter ändern
+            if (c.Id is "pc:volume.up" or "pc:volume.down" && t.EffectiveTrigger is "none" or "tap")
+            {
+                t.Trigger = "repeat";
+                TriggerBox.SelectedIndex = Array.IndexOf(TriggerIds, "repeat");
+            }
             // Gefährliche Aktionen (Herunterfahren …) nur mit Bestätigung auf dem Display
             if (c.Id.StartsWith("pc:", StringComparison.Ordinal) && BuiltinActions.Find(c.Id[3..]) is { Confirm: true } && t.EffectiveTrigger is "none" or "tap")
             {
                 t.Trigger = "confirm";
                 TriggerBox.SelectedIndex = Array.IndexOf(TriggerIds, "confirm");
             }
-        });
+        }, panels: true);
         TileHoldBox.ValueChanged += (_, _) => EditTile("thold", t => t.HoldMs = (int?)TileHoldBox.Value);
         OnBox.IsCheckedChanged += (_, _) =>
         {
@@ -534,9 +666,9 @@ public partial class EditorWindow : Window
 
     // ---- Navigation ----------------------------------------------------------------------------
 
-    private static readonly string[] NavKeys = ["nav.display", "nav.actions", "nav.device", "nav.app"];
-    private static readonly string[] NavIcons = ["monitor-dashboard", "flash", "cellphone-link", "cog"];
-    private readonly TextBlock[] _navLabels = new TextBlock[4];
+    private static readonly string[] NavKeys = ["nav.display", "nav.actions", "nav.device", "nav.app", "nav.radio"];
+    private static readonly string[] NavIcons = ["monitor-dashboard", "flash", "cellphone-link", "cog", "radio"];
+    private readonly TextBlock[] _navLabels = new TextBlock[5];
     private bool _navBusy;
 
     private void BuildNav()
@@ -565,6 +697,7 @@ public partial class EditorWindow : Window
         ActionsPage.IsVisible = index == 1;
         PageDevice.IsVisible = index == 2;
         AppPage.IsVisible = index == 3;
+        RadioPage.IsVisible = index == 4;
     }
 
     /// <summary>Welche Kacheln verwenden diese Aktion? (für die Sperre beim Löschen)</summary>
@@ -593,6 +726,7 @@ public partial class EditorWindow : Window
     {
         ApplyTexts();
         ActionsPage.ApplyTexts();
+        RadioPage.ApplyTexts();
         SetupPage.ApplyTexts();
         FirmwarePage.ApplyTexts();
         AppPage.ApplyTexts();
@@ -677,7 +811,9 @@ public partial class EditorWindow : Window
     private void Rebuild()
     {
         if (_cfg.Pages.Count == 0) return;
-        var options = new PreviewOptions { Page = _page, Selected = _sel, Ghost = _ghost, GhostValid = _ghostValid, States = CurrentStates(), Calendar = _core?.CalendarLines.Count > 0 || Settings.CalendarUrl.Length > 0 ? _core?.CalendarLines : null };
+        var demo = DemoBox.IsChecked == true;
+        var options = new PreviewOptions { Page = _page, Selected = demo ? null : _sel, ShowGrid = !demo, Ghost = _ghost, GhostValid = _ghostValid, States = CurrentStates(), Calendar = _core?.CalendarLines.Count > 0 || Settings.CalendarUrl.Length > 0 ? _core?.CalendarLines : null,
+            Radio = _core?.Radio.CurrentStation is { } rs ? (rs.Name, _core.Radio.Title, _core.Radio.Playing) : null };
         foreach (var t in _on) options.On.Add(t);
         Host.Content = DisplayRenderer.Build(_cfg, options);
     }
@@ -739,6 +875,7 @@ public partial class EditorWindow : Window
             HoldBox.Value = _cfg.HoldMs;
             IdleBox.Value = Minutes(_cfg.Idle.TimeoutS);
             UpdatePowerSummary();
+            SyncRadioTheme();
             IdleBrightBox.Value = _cfg.Idle.Brightness;
             IdleMoveBox.Value = Minutes(_cfg.Idle.MoveS);
             _cfg.Idle.Values ??= DefaultIdleValues();
@@ -763,15 +900,37 @@ public partial class EditorWindow : Window
             NoTileText.IsVisible = t == null;
             if (t == null) return;
 
-            TypeBox.SelectedIndex = t.IsButton ? 1 : t.IsCalendar ? 2 : 0;
+            TypeBox.SelectedIndex = t.IsButton ? 1 : t.IsCalendar ? 2 : t.IsRadio ? 3 : 0;
             TitleDe.Text = t.Title.Get(_cfg.Language);
             IconBox.Text = t.Icon ?? "";
             IconPreview.Text = t.Icon != null ? MdiIcons.Glyph(t.Icon) : "";
-            SourceBox.Text = t.Source ?? "";
+            var pcSource = IsPcSource(t.Source);
+            var btnHa = t.IsButton && t.Action == null && ((!string.IsNullOrWhiteSpace(t.Source) && !pcSource) || _haModeTiles.Contains(t));
+            var adv = t.IsButton && !btnHa && (_advTiles.Contains(t) || (!string.IsNullOrWhiteSpace(t.Source) && t.Source != AutoSource(t.Action)));
+            ButtonModeBox.SelectedIndex = btnHa ? 1 : 0;
+            AdvLightBox.IsChecked = adv;
+            _srcKinds = KindsFor(t);
+            FillCombo(SourceKindBox, _srcKinds.Select(KindText).ToList());
+            var kind = pcSource ? "pc" : t.IsButton && string.IsNullOrWhiteSpace(t.Source) && t.Action != null ? "none" : "ha";
+            SourceKindBox.SelectedIndex = Array.IndexOf(_srcKinds, kind);
+            SourceKindLabel.Text = t.IsButton ? T("Leuchtet auf, wenn …", "Lights up when …") : T("Datenquelle", "Data source");
+            PcSourceBox.SelectedIndex = pcSource ? Math.Max(0, Array.FindIndex(PcSources, p => "pc:" + p.Id == t.Source)) : -1;
+            SourceBox.Text = pcSource ? "" : t.Source ?? "";
             FormatBox.SelectedIndex = Array.IndexOf(FormatIds, t.EffectiveFormat);
             MaxBox.Value = (decimal?)(t.Max ?? 0);
-            MaxPanel.IsVisible = !t.IsButton && !t.IsCalendar && t.EffectiveFormat is "power" or "kwh" or "percent";
-            SourceLabel.IsVisible = SourcePanelRow.IsVisible = FormatBox.IsVisible = FormatLabel.IsVisible = !t.IsCalendar;
+            MaxPanel.IsVisible = !t.IsButton && !t.IsCalendar && !t.IsRadio && t.EffectiveFormat is "power" or "kwh" or "percent";
+            var hasSource = !t.IsCalendar && !t.IsRadio;
+            var showKinds = t.IsButton ? adv : hasSource;
+            SourceKindLabel.IsVisible = SourceKindBox.IsVisible = showKinds;
+            FormatLabel.IsVisible = FormatBox.IsVisible = hasSource && !t.IsButton;
+            PcSourceBox.IsVisible = showKinds && pcSource;
+            SourceLabel.IsVisible = SourcePanelRow.IsVisible = t.IsButton ? btnHa || (adv && kind == "ha") : hasSource && !pcSource;
+            SourceLabel.Text = t.IsButton && btnHa
+                ? T("Home-Assistant-Entität, die umgeschaltet wird", "Home Assistant entity that is toggled")
+                : T("Home-Assistant-Entität (z. B. sensor.xyz)", "Home Assistant entity (e.g. sensor.xyz)");
+            ButtonModeLabel.IsVisible = ButtonModeBox.IsVisible = t.IsButton;
+            AdvLightBox.IsVisible = t.IsButton && !btnHa;
+            ActionLabel.IsVisible = ActionBox.IsVisible = NewActionButton.IsVisible = t.IsButton && !btnHa;
             ButtonPanel.IsVisible = t.IsButton;
             TriggerBox.SelectedIndex = Array.IndexOf(TriggerIds, t.EffectiveTrigger);
             TileHoldBox.Value = t.HoldMs ?? 0;
@@ -909,6 +1068,7 @@ public partial class EditorWindow : Window
         Touch(key);
         apply(_cfg);
         UpdatePowerSummary();
+        SyncRadioTheme();
         Changed(panels: key is "lang");
     }
 
@@ -1031,10 +1191,45 @@ public partial class EditorWindow : Window
         return null;
     }
 
+    /// <summary>Vorführmodus: die Taste in der Vorschau kurz aufleuchten lassen und am Gerät (oder, ohne Gerät, direkt am PC) auslösen.</summary>
+    private void DemoPress(TileModel tile)
+    {
+        if (!tile.IsButton && !tile.IsRadio) return;
+        var index = Page.Tiles.IndexOf(tile);
+        if (_core == null || index < 0) return;
+        if (LiveBox.IsChecked == true && _core.Link.IsConnected)
+        {
+            _core.Link.Send(Protocol.Press(_page, index));          // das Gerät löst aus (auch Home-Assistant-Schalter) und leuchtet auf
+        }
+        else if (tile.Action is { } action && action.StartsWith("pc:", StringComparison.Ordinal))
+        {
+            var id = action[3..];
+            Task.Run(() => _core.Run(id));                           // ohne Gerät wenigstens die PC-Aktion ausführen
+        }
+        // Aufleuchten in der Vorschau
+        _on.Add(tile);
+        Rebuild();
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(260) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            _on.Remove(tile);
+            Rebuild();
+        };
+        timer.Start();
+    }
+
     private void OnHostPressed(object? sender, PointerPressedEventArgs e)
     {
         if (_cfg.Pages.Count == 0 || !e.GetCurrentPoint(Host).Properties.IsLeftButtonPressed) return;
         var p = e.GetPosition(Host);
+
+        // Vorführmodus: ein Klick löst die Taste aus, statt sie auszuwählen
+        if (DemoBox.IsChecked == true && !(_cfg.Pages.Count > 1 && p.Y >= DisplayRenderer.NavY && p.Y <= DisplayRenderer.NavY + DisplayRenderer.NavH))
+        {
+            if (TileAt(p) is { } pressed) DemoPress(pressed);
+            return;
+        }
 
         // Seitenleiste unten auf dem Display: Seite wechseln
         if (_cfg.Pages.Count > 1 && p.Y >= DisplayRenderer.NavY && p.Y <= DisplayRenderer.NavY + DisplayRenderer.NavH)
@@ -1047,6 +1242,7 @@ public partial class EditorWindow : Window
                 _page = index;
                 _sel = null;
                 Refresh(panels: true);
+                if (LiveBox.IsChecked == true) { Log.Info($"Seite {_page + 1} ans Gerät"); _core?.Link.Send(Protocol.Page(_page, click: DemoBox.IsChecked == true)); }   // das Display zeigt dieselbe Seite (im Vorführmodus mit Klick)
             }
             return;
         }

@@ -8,7 +8,6 @@ namespace OverBoardAgent.Core;
 /// </summary>
 public sealed class AgentCore : IDisposable
 {
-    private const int VolumeStep = 5;   // Prozentpunkte pro Tastendruck
 
     public AgentCore(IPlatform platform, DeviceLink link, ActionStore actions)
     {
@@ -16,12 +15,14 @@ public sealed class AgentCore : IDisposable
         Link = link;
         Actions = actions;
         Platform.StateChanged += (id, value) => Link.SendState(id, value);
+        Radio = new RadioService { Send = line => Link.Send(line) };
         Platform.AwayChanged += away => Link.Send(Protocol.Pc(away));   // das Gerät schaltet danach sein Display (Einstellung "Energiesparen")
         Link.ActionReceived += id => Task.Run(() => Run(id));   // nicht auf dem Lesethread: er muss weiter Nachrichten annehmen
         Link.ConnectionChanged += (connected, _) =>
         {
             if (!connected) return;
             RefreshCalendarSoon();
+            Radio.OnDeviceConnected();
             foreach (var (id, value) in Platform.GetStates()) Link.SendState(id, value);   // nach hello einmal alles
             Link.Send(Protocol.Pc(Platform.IsAway));
             Task.Run(async () => await PushCredentialsAsync());                      // Home-Assistant-Zugang ans Gerät
@@ -83,6 +84,9 @@ public sealed class AgentCore : IDisposable
         return (true, null, lines.Count);
     }
 
+    /// <summary>Radio-Player: Senderliste, Wiedergabe, Titel.</summary>
+    public RadioService Radio { get; }
+
     public IPlatform Platform { get; }
     public DeviceLink Link { get; }
     public ActionStore Actions { get; }
@@ -127,11 +131,14 @@ public sealed class AgentCore : IDisposable
         {
             switch (id)
             {
-                case "volume.up": Platform.AdjustVolume(+VolumeStep); return true;
-                case "volume.down": Platform.AdjustVolume(-VolumeStep); return true;
+                case "volume.up": Platform.AdjustVolume(+Settings.VolumeStep); return true;
+                case "volume.down": Platform.AdjustVolume(-Settings.VolumeStep); return true;
                 case "mute.toggle": Platform.ToggleMute(); return true;
                 case "mic.toggle": Platform.ToggleMicMute(); return true;
                 case "lock": Platform.LockWorkstation(); return true;
+                case "radio.toggle": Radio.Toggle(); return true;
+                case "radio.next": Radio.Next(); return true;
+                case "radio.prev": Radio.Previous(); return true;
             }
 
             if (BuiltinActions.Find(id) is { } builtin)
@@ -171,6 +178,7 @@ public sealed class AgentCore : IDisposable
     public void Dispose()
     {
         _cts.Cancel();
+        Radio.Dispose();
         Link.Dispose();
         Platform.Dispose();
     }

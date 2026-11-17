@@ -32,6 +32,8 @@ public sealed class PreviewOptions
     public IReadOnlyDictionary<string, string>? States;
     /// <summary>Echte Termine für Kalender-Kacheln. Null = Beispieltermine.</summary>
     public IReadOnlyList<OverBoardAgent.Core.CalLine>? Calendar;
+    /// <summary>Radio-Kacheln: Sender, Titel, ob es spielt. Null = Beispiel.</summary>
+    public (string Station, string Title, bool Playing)? Radio;
     public Rect? Ghost;                                   // Zielposition beim Ziehen
     public bool GhostValid = true;
 }
@@ -140,6 +142,19 @@ public static class DisplayRenderer
         _ => "Text",
     };
 
+    /// <summary>Wie FitFont, aber für umbrochenen Text (Radio-Titel): größte Schrift, in der der Text in die Fläche passt.</summary>
+    private static double FitWrapped(string text, double maxW, double maxH)
+    {
+        foreach (var size in new[] { 48.0, 36, 28, 20 })
+        {
+            var tb = Label(text, TextFont, size, Colors.White);
+            tb.TextWrapping = TextWrapping.Wrap;
+            tb.Measure(new Size(Math.Max(10, maxW), double.PositiveInfinity));
+            if (tb.DesiredSize.Height <= maxH) return size;
+        }
+        return 20;
+    }
+
     private static double FitFont(string text, double maxW, double maxH)
     {
         foreach (var size in new[] { 64.0, 48, 36, 28, 20 })
@@ -163,7 +178,7 @@ public static class DisplayRenderer
         var pageIndex = Math.Clamp(options.Page, 0, cfg.Pages.Count - 1);
         var page = cfg.Pages[pageIndex];
         if (options.ShowGrid) AddGuides(root, page);
-        foreach (var tile in page.Tiles) AddTile(root, page, tile, th, cfg.Language, options.On.Contains(tile), options.States, options.Calendar);
+        foreach (var tile in page.Tiles) AddTile(root, page, tile, th, cfg.Language, options.On.Contains(tile), options.States, options.Calendar, options.Radio);
         if (cfg.Pages.Count > 1) AddNav(root, cfg, pageIndex, th);
 
         if (options.Selected != null && page.Tiles.Contains(options.Selected)) AddSelection(root, TileRect(page, options.Selected));
@@ -205,7 +220,7 @@ public static class DisplayRenderer
                 var rect = new Rectangle
                 {
                     Width = CellW, Height = cellH, RadiusX = 8, RadiusY = 8,
-                    Stroke = new SolidColorBrush(Color.FromArgb(46, 128, 140, 160)), StrokeThickness = 1,
+                    Stroke = new SolidColorBrush(Color.FromArgb(120, 140, 155, 180)), StrokeThickness = 1.5,
                     StrokeDashArray = [4, 4], IsHitTestVisible = false,
                 };
                 Put(root, rect, GridX + c * (CellW + Gap), GridY + r * (cellH + Gap));
@@ -213,7 +228,7 @@ public static class DisplayRenderer
     }
 
     private static void AddTile(Canvas root, PageModel page, TileModel t, ThemeColors th, string language, bool on,
-        IReadOnlyDictionary<string, string>? states, IReadOnlyList<OverBoardAgent.Core.CalLine>? calendar)
+        IReadOnlyDictionary<string, string>? states, IReadOnlyList<OverBoardAgent.Core.CalLine>? calendar, (string Station, string Title, bool Playing)? radio)
     {
         var rect = TileRect(page, t);
         // Echter Zustand, wenn bekannt; sonst (ohne Quelle oder ohne Verbindung) Beispielwerte
@@ -242,6 +257,10 @@ public static class DisplayRenderer
         if (t.IsCalendar)
         {
             AddCalendarTile(inner, t, th, language, w, h, title, calendar);
+        }
+        else if (t.IsRadio)
+        {
+            AddRadioTile(inner, t, th, w, h, title, radio);
         }
         else if (!t.IsButton)
         {
@@ -273,6 +292,35 @@ public static class DisplayRenderer
                 Put(inner, new Rectangle { Width = w - 2 * Pad, Height = 8, RadiusX = 4, RadiusY = 4, Fill = new SolidColorBrush(th.Nav) }, Pad, Pad);
             }
         }
+    }
+
+    /// <summary>Radio-Kachel: links das Logo (hier als Symbol), rechts Sender und Titel, unten rechts Start/Stopp. Masse wie in ui.c.</summary>
+    private static void AddRadioTile(Canvas inner, TileModel t, ThemeColors th, double w, double h, string title, (string Station, string Title, bool Playing)? radio)
+    {
+        var (station, song, playing) = radio ?? ("Radio BOB!", "Mötley Crüe - Kickstart My Heart", true);
+        if (station.Length == 0) station = title.Length > 0 ? title : "Radio";
+        var logo = Math.Min(Math.Min(h - 2 * Pad, 192), w / 2);
+        double x0 = Pad;
+        if (logo >= 48)
+        {
+            var box = new Border { Width = logo, Height = logo, CornerRadius = new CornerRadius(8), Background = new SolidColorBrush(th.Nav) };
+            Put(inner, box, Pad, Pad);
+            var iconSize = logo >= 100 ? 64 : 36;
+            PutText(inner, MdiIcons.Glyph("radio"), IconFont, iconSize, th.Title, s => new Point(Pad + (logo - s.Width) / 2, Pad + (logo - s.Height) / 2));
+            x0 = Pad + logo + 16;
+        }
+        var avail = w - x0 - Pad;
+        PutText(inner, station, TextFont, 20, th.Title, _ => new Point(x0, Pad));
+        var songText = song.Length > 0 ? song : (playing ? "..." : "");
+        var availH = Math.Max(28, h - 2 * Pad - 30 - 40);
+        var fontSize = FitWrapped(songText, avail, availH);
+        var label = Label(songText, TextFont, fontSize, th.Value);
+        label.Width = Math.Max(10, avail);
+        label.TextWrapping = TextWrapping.Wrap;
+        label.MaxHeight = availH;
+        Put(inner, label, x0, Pad + 30);
+        PutText(inner, MdiIcons.Glyph(playing ? "stop-circle-outline" : "play-circle-outline"), IconFont, 36,
+            playing ? th.Accent : th.Title, s => new Point(w - Pad - s.Width, h - Pad - s.Height));
     }
 
     private const double CalRowH = 30;     // gleich wie in der Firmware (ui.c)

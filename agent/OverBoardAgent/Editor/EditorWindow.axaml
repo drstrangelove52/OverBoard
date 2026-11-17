@@ -33,6 +33,7 @@
                             <Button x:Name="SendButton" Classes="accent" Margin="0,0,6,0" />
                             <CheckBox x:Name="LiveBox" IsChecked="True" Margin="0,0,16,0" VerticalAlignment="Center" />
                             <CheckBox x:Name="RealValuesBox" IsChecked="True" Margin="0,0,16,0" VerticalAlignment="Center" />
+                            <CheckBox x:Name="DemoBox" Margin="0,0,16,0" VerticalAlignment="Center" />
                             <Button x:Name="LoadButton" Margin="0,0,6,0" />
                             <Button x:Name="OpenFileButton" Margin="0,0,6,0" />
                             <Button x:Name="SaveFileButton" Margin="0,0,6,0" />
@@ -91,6 +92,12 @@
                                         <TextBlock x:Name="IconPreview" Grid.Column="1" FontSize="30" VerticalAlignment="Center" />
                                         <Button x:Name="IconPickButton" Grid.Column="2" Content="…" />
                                     </Grid>
+                                    <TextBlock x:Name="ButtonModeLabel" FontSize="12" Opacity="0.7" />
+                                    <ComboBox x:Name="ButtonModeBox" HorizontalAlignment="Stretch" />
+                                    <CheckBox x:Name="AdvLightBox" />
+                                    <TextBlock x:Name="SourceKindLabel" FontSize="12" Opacity="0.7" />
+                                    <ComboBox x:Name="SourceKindBox" HorizontalAlignment="Stretch" />
+                                    <ComboBox x:Name="PcSourceBox" HorizontalAlignment="Stretch" />
                                     <TextBlock x:Name="SourceLabel" FontSize="12" Opacity="0.7" />
                                     <Grid x:Name="SourcePanelRow" ColumnDefinitions="*,Auto" ColumnSpacing="8">
                                         <TextBox x:Name="SourceBox" />
@@ -126,6 +133,9 @@
                         </ScrollViewer>
                     </Grid>
                 </Grid>
+
+                <!-- Seite Radio -->
+                <local:RadioView x:Name="RadioPage" IsVisible="False" />
 
                 <!-- Seite Aktionen -->
                 <local:ActionsView x:Name="ActionsPage" IsVisible="False" />

@@ -26,6 +26,7 @@ public partial class AppView : UserControl
         LanguageBox.Items.Add("English");
         LanguageBox.SelectedIndex = Settings.Language == "en" ? 1 : 0;
         AutostartBox.IsChecked = SafeAutostart();
+        VolumeStepBox.Value = Settings.VolumeStep;
         _loading = false;
         ApplyTexts();
 
@@ -43,6 +44,12 @@ public partial class AppView : UserControl
             try { _core.Platform.SetAutostart(AutostartBox.IsChecked == true); }
             catch (Exception ex) { Log.Warn($"Autostart: {ex.Message}"); }
             (Avalonia.Application.Current as App)?.RefreshTexts();
+        };
+        VolumeStepBox.ValueChanged += (_, _) =>
+        {
+            if (_loading || VolumeStepBox.Value is not { } v) return;
+            Settings.VolumeStep = Math.Clamp((int)v, 1, 20);
+            Settings.Save();
         };
         UpdateBox.IsChecked = Settings.UpdateCheck;
         UpdateBox.IsCheckedChanged += (_, _) =>
@@ -147,6 +154,7 @@ public partial class AppView : UserControl
         if (_core != null) UpdateStatusRefresh();
         LanguageLabel.Text = Strings.Get("win.language");
         AutostartBox.Content = Strings.Get("win.autostart");
+        VolumeStepLabel.Text = Strings.Get("win.volstep");
         AboutHeader.Text = Strings.Get("app.about");
         VersionText.Text = "OverBoard Agent " + (typeof(App).Assembly.GetName().Version?.ToString(3) ?? "");
         FoldersText.Text = Strings.Get("app.folders");
