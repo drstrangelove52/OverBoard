@@ -191,7 +191,16 @@ static esp_err_t lvgl_start(void)
     ESP_RETURN_ON_FALSE(s_disp, ESP_FAIL, TAG, "lvgl_port_add_disp_dsi");
 
     const lvgl_port_touch_cfg_t touch = { .disp = s_disp, .handle = s_touch };
-    ESP_RETURN_ON_FALSE(lvgl_port_add_touch(&touch), ESP_FAIL, TAG, "lvgl_port_add_touch");
+    lv_indev_t *indev = lvgl_port_add_touch(&touch);
+    ESP_RETURN_ON_FALSE(indev, ESP_FAIL, TAG, "lvgl_port_add_touch");
+
+    // Schnelleres Ansprechen: Beruehrung alle 10 ms abfragen (Standard 33 ms) und das Bild alle 16 ms auffrischen (Standard 33 ms)
+    lvgl_port_lock(0);
+    lv_timer_t *rt = lv_indev_get_read_timer(indev);
+    if (rt) lv_timer_set_period(rt, 10);
+    lv_timer_t *dt = lv_display_get_refr_timer(s_disp);
+    if (dt) lv_timer_set_period(dt, 16);
+    lvgl_port_unlock();
     return ESP_OK;
 }
 

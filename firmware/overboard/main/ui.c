@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "esp_heap_caps.h"
 #include <time.h>
 
 #include "audio.h"
@@ -62,6 +63,15 @@ static const char *cache_get(const char *id)
     return NULL;
 }
 
+// Radio: zuletzt gemeldeter Zustand und das Senderlogo (RGB565, 192 x 192, im PSRAM)
+#define RADIO_IMG 192
+static char s_radio_station[64], s_radio_title[160];
+static bool s_radio_on;
+static uint8_t *s_radio_buf;                  // fertiges Logo
+static uint8_t *s_radio_wip;                  // Logo im Aufbau (wird nur vom USB-Task beschrieben)
+static int s_radio_wip_got;
+static lv_image_dsc_t s_radio_dsc;
+
 #define CAL_ROW_H 30                          // Zeilenhoehe der Kalender-Kachel (gleich wie in der Vorschau des PC-Programms)
 static cal_event_t s_cal[CAL_MAX];            // zuletzt gemeldete Termine (bleiben nach einem Neuaufbau der Oberflaeche)
 static int s_cal_n;
@@ -71,11 +81,16 @@ typedef struct {
     lv_obj_t *obj, *value, *icon, *title, *bar;
     lv_obj_t *cal_when[CAL_MAX], *cal_title[CAL_MAX];   // Kalender-Kachel: Zeilen mit Tag/Zeit und Titel
     int cal_rows, cal_top, cal_w;
+    lv_obj_t *r_box, *r_ph, *r_img, *r_station, *r_song, *r_state;   // Radio-Kachel
+    int r_logo;
+    lv_timer_t *rep_timer;     // Wiederholen bei gedrueckt gehaltener Taste (TRIG_REPEAT)
     int avail_w, avail_h;      // Platz fuer den Wert (Anzeige-Kachel)
     lv_timer_t *flash_timer;   // Rueckmeldung nach dem Druecken (Aufleuchten, Fehlerblinken)
     bool st_on, st_na;         // zuletzt bekannter Zustand, zum Wiederherstellen nach dem Aufleuchten
     bool flash_err;            // gerade rot (Aktion nicht moeglich)
 } tile_t;
+
+static void rep_stop(tile_t *t);
 
 static tile_t *s_tiles;
 static int s_n_tiles;
@@ -380,6 +395,20 @@ static void confirm_build(void)
     lv_obj_add_event_cb(s_confirm_yes, confirm_yes, LV_EVENT_CLICKED, NULL);
 }
 
+#define REPEAT_DELAY_MS 400     // so lange festhalten, bis das Wiederholen beginnt
+#define REPEAT_EVERY_MS 100     // danach alle 100 ms
+
+static void rep_cb(lv_timer_t *timer)
+{
+    tile_t *t = lv_timer_get_user_data(timer);
+    if (!do_toggle(t)) {                       // PC weg: aufhoeren
+        rep_stop(t);
+        flash_error(t);
+        return;
+    }
+    lv_timer_set_period(timer, REPEAT_EVERY_MS);
+}
+
 static void tile_event(lv_event_t *e)
 {
     tile_t *t = lv_event_get_user_data(e);
@@ -401,6 +430,15 @@ static void tile_event(lv_event_t *e)
         if (c == LV_EVENT_PRESSED) bar_start(t);
         else if (c == LV_EVENT_RELEASED || c == LV_EVENT_PRESS_LOST) bar_reset(t);
         break;
+    case TRIG_REPEAT:
+        if (c == LV_EVENT_PRESSED) {
+            rep_stop(t);
+            if (do_toggle(t)) t->rep_timer = lv_timer_create(rep_cb, REPEAT_DELAY_MS, t);
+            else flash_error(t);
+        } else if (c == LV_EVENT_RELEASED || c == LV_EVENT_PRESS_LOST) {
+            rep_stop(t);
+        }
+        break;
     case TRIG_CONFIRM:
         if (c == LV_EVENT_CLICKED) {
             if (tile_ready(t)) confirm_show(t);
@@ -414,8 +452,11 @@ static void tile_event(lv_event_t *e)
 
 // ---- Seiten und Navigation ------------------------------------------------------------------
 
+static int s_cur_page;                     // gerade angezeigte Seite
+
 static void show_page(int p)
 {
+    s_cur_page = p;
     const theme_t *th = theme();
     for (int i = 0; i < s_n_pages; i++) {
         bool act = (i == p);
@@ -470,8 +511,17 @@ static void paint_flash(tile_t *t, uint32_t bg, uint32_t fg)
     if (t->icon) lv_obj_set_style_text_color(t->icon, col(fg), 0);
 }
 
+static void rep_stop(tile_t *t)
+{
+    if (t->rep_timer) {
+        lv_timer_delete(t->rep_timer);
+        t->rep_timer = NULL;
+    }
+}
+
 static void flash_cancel(tile_t *t)
 {
+    rep_stop(t);
     if (t->flash_timer) {
         lv_timer_delete(t->flash_timer);
         t->flash_timer = NULL;
@@ -618,6 +668,111 @@ static void cal_refresh(tile_t *t)
     }
 }
 
+// ---- Radio-Kachel ---------------------------------------------------------------------------
+
+// Groesste Schrift, in der der (umbrochene) Text in die Flaeche passt.
+static const lv_font_t *fit_font_wrap(const char *text, int w, int h)
+{
+    static const int sizes[] = { 48, 36, 28, 20 };
+    for (size_t i = 0; i < sizeof(sizes) / sizeof(sizes[0]); i++) {
+        const lv_font_t *f = ob_font(sizes[i]);
+        lv_point_t sz;
+        lv_text_get_size(&sz, text, f, 0, 0, w, LV_TEXT_FLAG_NONE);
+        if (sz.y <= h) return f;
+    }
+    return ob_font(20);
+}
+
+static void radio_refresh(tile_t *t)
+{
+    if (t->cfg->type != TILE_RADIO) return;
+    const theme_t *th = theme();
+    const char *name = s_radio_station[0] ? s_radio_station : lt(t->cfg->title);
+    if (!name[0]) name = "Radio";
+    lv_label_set_text(t->r_station, name);
+    const char *song = s_radio_title[0] ? s_radio_title : (s_radio_on ? "..." : "");
+    lv_label_set_text(t->r_song, song);
+    lv_obj_set_style_text_font(t->r_song, fit_font_wrap(song, t->avail_w, t->avail_h), 0);
+    set_icon(t->r_state, s_radio_on ? "stop-circle-outline" : "play-circle-outline");
+    lv_obj_set_style_text_color(t->r_state, col(s_radio_on ? th->accent : th->title), 0);
+    if (t->r_img) {
+        if (s_radio_buf) {
+            lv_image_set_src(t->r_img, &s_radio_dsc);
+            lv_obj_remove_flag(t->r_img, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(t->r_img, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+}
+
+void ui_set_radio(const char *station, const char *title, bool on)
+{
+    if (!lvgl_port_lock(200)) return;
+    snprintf(s_radio_station, sizeof(s_radio_station), "%.63s", station ? station : "");
+    snprintf(s_radio_title, sizeof(s_radio_title), "%.159s", title ? title : "");
+    s_radio_on = on;
+    for (int i = 0; i < s_n_tiles; i++) radio_refresh(&s_tiles[i]);
+    lvgl_port_unlock();
+}
+
+void ui_radio_image(int w, int h, int off, const uint8_t *data, int len)
+{
+    if (w == 0 || h == 0) {                           // Logo entfernen
+        free(s_radio_wip);
+        s_radio_wip = NULL;
+        if (!lvgl_port_lock(1000)) return;
+        if (s_radio_buf) {
+            lv_image_cache_drop(&s_radio_dsc);
+            for (int i = 0; i < s_n_tiles; i++) if (s_tiles[i].r_img) lv_obj_add_flag(s_tiles[i].r_img, LV_OBJ_FLAG_HIDDEN);
+            free(s_radio_buf);
+            s_radio_buf = NULL;
+        }
+        lvgl_port_unlock();
+        return;
+    }
+    int total = RADIO_IMG * RADIO_IMG * 2;
+    if (w != RADIO_IMG || h != RADIO_IMG || off < 0 || len <= 0 || off + len > total) return;
+    // Die Stuecke werden ohne LVGL-Sperre gesammelt (das Bild ist noch nicht sichtbar): so staut sich der USB-Empfang nicht
+    if (off == 0) {
+        free(s_radio_wip);
+        s_radio_wip = heap_caps_malloc(total, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        s_radio_wip_got = 0;
+    }
+    if (!s_radio_wip) return;
+    if (off != s_radio_wip_got) {                     // ein Stueck ging verloren: Bild verwerfen, nie halb anzeigen
+        ESP_LOGW(TAG, "Radio-Logo unvollstaendig (erwartet %d, erhalten %d)", s_radio_wip_got, off);
+        free(s_radio_wip);
+        s_radio_wip = NULL;
+        return;
+    }
+    memcpy(s_radio_wip + off, data, len);
+    s_radio_wip_got += len;
+    if (s_radio_wip_got < total) return;
+
+    if (!lvgl_port_lock(1000)) {                      // vollstaendig: das neue Bild uebernehmen
+        ESP_LOGW(TAG, "LVGL-Sperre nicht erhalten, Radio-Logo verworfen");
+        free(s_radio_wip);
+        s_radio_wip = NULL;
+        return;
+    }
+    for (int i = 0; i < s_n_tiles; i++) if (s_tiles[i].r_img) lv_image_set_src(s_tiles[i].r_img, NULL);
+    lv_image_cache_drop(&s_radio_dsc);
+    free(s_radio_buf);
+    s_radio_buf = s_radio_wip;
+    s_radio_wip = NULL;
+    memset(&s_radio_dsc, 0, sizeof(s_radio_dsc));
+    s_radio_dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
+    s_radio_dsc.header.cf = LV_COLOR_FORMAT_RGB565;
+    s_radio_dsc.header.w = RADIO_IMG;
+    s_radio_dsc.header.h = RADIO_IMG;
+    s_radio_dsc.header.stride = RADIO_IMG * 2;
+    s_radio_dsc.data_size = total;
+    s_radio_dsc.data = s_radio_buf;
+    for (int i = 0; i < s_n_tiles; i++) radio_refresh(&s_tiles[i]);
+    lvgl_port_unlock();
+    ESP_LOGI(TAG, "Radio-Logo uebernommen");
+}
+
 static void build_tile(lv_obj_t *page, tile_t *t, int cell_h)
 {
     const theme_t *th = theme();
@@ -650,6 +805,43 @@ static void build_tile(lv_obj_t *page, tile_t *t, int cell_h)
         lv_text_get_size(&ts, lt(c->title), ob_font(narrow ? 14 : 20), 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
         t->avail_h = ph - 2 * PAD - (ts.y + (narrow ? 5 : 8));
         lv_obj_align(t->value, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+    } else if (c->type == TILE_RADIO) {
+        int logo = ph - 2 * PAD;
+        if (logo > RADIO_IMG) logo = RADIO_IMG;
+        if (logo > pw / 2) logo = pw / 2;
+        int x0 = 0;
+        t->r_logo = logo >= 48 ? logo : 0;
+        if (t->r_logo) {
+            t->r_box = make_plain(o, logo, logo);
+            lv_obj_set_style_bg_opa(t->r_box, LV_OPA_COVER, 0);
+            lv_obj_set_style_bg_color(t->r_box, col(th->nav), 0);
+            lv_obj_set_style_radius(t->r_box, 8, 0);
+            lv_obj_align(t->r_box, LV_ALIGN_TOP_LEFT, 0, 0);
+            t->r_ph = make_icon(t->r_box, "radio", logo >= 100 ? 64 : 36, th->title);
+            lv_obj_center(t->r_ph);
+            t->r_img = lv_image_create(o);
+            lv_obj_set_size(t->r_img, logo, logo);
+            lv_image_set_inner_align(t->r_img, LV_IMAGE_ALIGN_STRETCH);
+            lv_obj_align(t->r_img, LV_ALIGN_TOP_LEFT, 0, 0);
+            lv_obj_add_flag(t->r_img, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_remove_flag(t->r_img, LV_OBJ_FLAG_CLICKABLE);
+            x0 = logo + 16;
+        }
+        int avail = pw - 2 * PAD - x0;
+        t->r_station = make_label(o, ob_font(20), th->title, "");
+        lv_obj_set_width(t->r_station, avail);
+        lv_label_set_long_mode(t->r_station, LV_LABEL_LONG_DOT);
+        lv_obj_align(t->r_station, LV_ALIGN_TOP_LEFT, x0, 0);
+        t->r_song = make_label(o, ob_font(28), th->value, "");
+        t->avail_w = avail;
+        t->avail_h = ph - 2 * PAD - 30 - 40;
+        if (t->avail_h < 28) t->avail_h = 28;
+        lv_obj_set_size(t->r_song, avail, t->avail_h);
+        lv_label_set_long_mode(t->r_song, LV_LABEL_LONG_DOT);
+        lv_obj_align(t->r_song, LV_ALIGN_TOP_LEFT, x0, 30);
+        t->r_state = make_icon(o, "play-circle-outline", 36, th->title);
+        lv_obj_align(t->r_state, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
+        radio_refresh(t);
     } else if (c->type == TILE_CALENDAR) {
         bool narrow = pw < 150;
         t->title = make_label(o, ob_font(narrow ? 14 : 20), th->title, lt(c->title));
@@ -688,7 +880,7 @@ static void build_tile(lv_obj_t *page, tile_t *t, int cell_h)
             lv_obj_set_style_bg_color(t->bar, col(th->accent), LV_PART_INDICATOR);
         }
     }
-    if (c->type == TILE_BUTTON && c->trigger != TRIG_NONE) lv_obj_add_event_cb(o, tile_event, LV_EVENT_ALL, t);
+    if ((c->type == TILE_BUTTON || c->type == TILE_RADIO) && c->trigger != TRIG_NONE) lv_obj_add_event_cb(o, tile_event, LV_EVENT_ALL, t);
     apply_state(t, NULL);
 }
 
@@ -921,6 +1113,8 @@ static void idle_build(void)
 
 // ---- Gesamtaufbau ---------------------------------------------------------------------------
 
+static const ob_config_t *s_ui_cfg;      // Konfiguration der zuletzt aufgebauten Oberflaeche (bleibt bis nach dem naechsten ui_reload gueltig)
+
 static void build_main(void)
 {
     const theme_t *th = theme();
@@ -990,6 +1184,7 @@ static void build_main(void)
     }
     show_page(0);
     clock_tick(NULL);
+    s_ui_cfg = cfg;
 }
 
 void ui_init(void)
@@ -1009,21 +1204,98 @@ void ui_init(void)
     ESP_LOGI(TAG, "UI aufgebaut (%d Seiten, %d Kacheln, %d Entitaeten)", s_n_pages, s_n_tiles, s_n_entities);
 }
 
+// ---- Sanftes Neuladen ------------------------------------------------------------------------
+// Aendert sich nur etwas an einzelnen Kacheln (verschieben, Groesse, Text, Symbol ...), werden nur diese angepasst statt
+// die ganze Oberflaeche abzubauen und neu zu zeichnen: das gibt kein Aufblitzen des Displays.
+
+static bool str_eq(const char *a, const char *b) { return a == b || (a && b && !strcmp(a, b)); }
+static bool lt_eq(ltext_t a, ltext_t b) { return str_eq(a.de, b.de) && str_eq(a.en, b.en); }
+
+// Gleicher Inhalt und gleiche Groesse (die Position darf anders sein)?
+static bool tile_same_look(const tile_cfg_t *a, const tile_cfg_t *b)
+{
+    return a->type == b->type && a->w == b->w && a->h == b->h && str_eq(a->entity, b->entity) && lt_eq(a->title, b->title) &&
+           str_eq(a->icon, b->icon) && a->fmt == b->fmt && a->max == b->max && a->trigger == b->trigger && a->hold_ms == b->hold_ms &&
+           str_eq(a->action, b->action);
+}
+
+static void tile_rebuild(int page, tile_t *t, int cell_h)
+{
+    flash_cancel(t);
+    if (t->bar) lv_anim_delete(t->bar, bar_exec);
+    if (s_confirm_tile == t) {
+        s_confirm_tile = NULL;
+        if (s_confirm) lv_obj_add_flag(s_confirm, LV_OBJ_FLAG_HIDDEN);
+    }
+    lv_obj_delete(t->obj);
+    const tile_cfg_t *cfg = t->cfg;
+    memset(t, 0, sizeof(*t));
+    t->cfg = cfg;
+    build_tile(s_pages[page], t, cell_h);
+    const char *known = cache_get(cfg->entity);
+    if (known) apply_state(t, known);
+}
+
+// true, wenn die Oberflaeche angepasst werden konnte (sonst muss sie ganz neu aufgebaut werden)
+static bool reload_gentle(const ob_config_t *old, const ob_config_t *cfg)
+{
+    if (!old || old->n_pages != cfg->n_pages || cfg->n_pages > MAX_PAGES) return false;
+    if (strcmp(old->language, cfg->language) || strcmp(old->theme, cfg->theme)) return false;
+    int total = 0;
+    for (int p = 0; p < cfg->n_pages; p++) {
+        const page_cfg_t *op = &old->pages[p], *np = &cfg->pages[p];
+        if (op->n_tiles != np->n_tiles || op->rows != np->rows || !lt_eq(op->title, np->title) || !str_eq(op->icon, np->icon)) return false;
+        total += np->n_tiles;
+    }
+    if (total != s_n_tiles) return false;
+
+    int ti = 0;
+    for (int p = 0; p < cfg->n_pages; p++) {
+        int grid_h = cfg->n_pages > 1 ? GRID_H : GRID_H_FULL;
+        int rows = cfg->pages[p].rows ? cfg->pages[p].rows : GRID_ROWS;
+        int cell_h = (grid_h - (rows - 1) * GAP) / rows;
+        for (int k = 0; k < cfg->pages[p].n_tiles; k++, ti++) {
+            tile_t *t = &s_tiles[ti];
+            const tile_cfg_t *ot = &old->pages[p].tiles[k], *nt = &cfg->pages[p].tiles[k];
+            if (t->cfg != ot) return false;              // Zuordnung stimmt nicht: lieber ganz neu aufbauen
+            t->cfg = nt;                                 // die alte Konfiguration wird gleich freigegeben
+            if (!tile_same_look(ot, nt)) {
+                tile_rebuild(p, t, cell_h);
+            } else if (ot->x != nt->x || ot->y != nt->y) {
+                lv_obj_set_pos(t->obj, nt->x * (CELL_W + GAP), nt->y * (cell_h + GAP));
+            }
+        }
+    }
+    free(s_entities);
+    s_entities = NULL;
+    collect_entities();                                  // die Quellen zeigen in die neue Konfiguration
+    s_ui_cfg = cfg;
+    return true;
+}
+
 void ui_reload(void)
 {
     const ob_config_t *cfg = ob_config();
     if (!lvgl_port_lock(1000)) return;
+    if (reload_gentle(s_ui_cfg, cfg)) {
+        if (!s_idle_on) board_set_backlight(cfg->brightness);
+        lvgl_port_unlock();
+        ESP_LOGI(TAG, "UI angepasst (%d Kacheln)", s_n_tiles);
+        return;
+    }
     i18n_set_code(cfg->language);
     theme_set(cfg->theme);
     for (int i = 0; i < s_n_tiles; i++) flash_cancel(&s_tiles[i]);   // offene Timer zeigen sonst auf freigegebene Kacheln
     s_confirm_tile = NULL;                                           // offene Rueckfrage gehoert zu einer alten Kachel
     if (s_confirm) lv_obj_add_flag(s_confirm, LV_OBJ_FLAG_HIDDEN);
+    int keep_page = s_cur_page;                                      // nach dem Neuaufbau auf derselben Seite bleiben
     lv_obj_clean(lv_screen_active());
     free(s_tiles);
     free(s_entities);
     s_tiles = NULL;
     s_entities = NULL;
     build_main();
+    if (keep_page > 0 && keep_page < s_n_pages) show_page(keep_page);
     {   // Werte im Ruhemodus: zuletzt bekannte Werte aus dem Zwischenspeicher
         const ob_config_t *c = ob_config();
         for (int i = 0; i < c->n_idle_items; i++)
@@ -1039,6 +1311,42 @@ void ui_reload(void)
 }
 
 // ---- Aktualisierung aus anderen Tasks -------------------------------------------------------
+
+// Der PC-Editor "drueckt" eine Kachel (Vorfuehrmodus): wie eine Beruehrung mit Klick, Aufleuchten und Aktion
+void ui_press_tile(int page, int idx)
+{
+    if (!lvgl_port_lock(200)) return;
+    if (s_ui_cfg && page >= 0 && page < s_ui_cfg->n_pages && idx >= 0 && idx < s_ui_cfg->pages[page].n_tiles) {
+        int ti = idx;
+        for (int p = 0; p < page; p++) ti += s_ui_cfg->pages[p].n_tiles;
+        if (ti < s_n_tiles) {
+            tile_t *t = &s_tiles[ti];
+            if (t->cfg->type == TILE_BUTTON || t->cfg->type == TILE_RADIO) {
+                audio_click();
+                if (!tile_ready(t)) {
+                    flash_error(t);
+                } else {
+                    flash_press(t);
+                    flash_release(t);
+                    if (t->cfg->trigger == TRIG_CONFIRM) confirm_show(t);
+                    else if (!do_toggle(t)) flash_error(t);
+                }
+            }
+        }
+    }
+    lvgl_port_unlock();
+}
+
+void ui_show_page(int page, bool click)
+{
+    if (!lvgl_port_lock(200)) return;
+    ESP_LOGI(TAG, "Seite %d anzeigen (aktuell %d von %d)", page, s_cur_page, s_n_pages);
+    if (page >= 0 && page < s_n_pages && page != s_cur_page) {
+        if (click) audio_click();
+        show_page(page);
+    }
+    lvgl_port_unlock();
+}
 
 void ui_set_calendar(const cal_event_t *ev, int n)
 {

@@ -159,7 +159,56 @@ static void cfg_reset_transfer(void)
     memset(&s_cfg, 0, sizeof(s_cfg));
 }
 
-// Pruefen, speichern und anwenden. Bei Fehlern bleibt die bisherige Konfiguration unveraendert.
+// Speichern im Flash verzoegert: Beim Schreiben des Flash steht der Speicherzugriff kurz still, und das Display blitzt dabei
+// (die Bildausgabe liest aus dem PSRAM). Beim Bearbeiten im PC-Programm kommen viele Aenderungen hintereinander; gespeichert
+// wird daher erst, wenn drei Sekunden nichts mehr kam.
+#define STORE_DELAY_US 3000000
+static char *s_pending_json;
+static SemaphoreHandle_t s_pending_lock;
+static esp_timer_handle_t s_store_timer;
+
+static void store_timer_cb(void *arg)
+{
+    (void)arg;
+    char *p = NULL;
+    xSemaphoreTake(s_pending_lock, portMAX_DELAY);
+    p = s_pending_json;
+    s_pending_json = NULL;
+    xSemaphoreGive(s_pending_lock);
+    if (!p) return;
+    esp_err_t se = config_store(p, strlen(p));
+    if (se != ESP_OK) ESP_LOGW(TAG, "Konfiguration nicht gespeichert: %s", esp_err_to_name(se));
+    else ESP_LOGI(TAG, "Konfiguration gespeichert");
+    free(p);
+}
+
+// Uebernimmt die Konfiguration (Eigentum geht an diese Funktion) und plant das Speichern ein.
+static void store_later(char *canon)
+{
+    if (!s_pending_lock) {
+        s_pending_lock = xSemaphoreCreateMutex();
+        const esp_timer_create_args_t args = { .callback = store_timer_cb, .name = "cfg_store" };
+        esp_timer_create(&args, &s_store_timer);
+    }
+    xSemaphoreTake(s_pending_lock, portMAX_DELAY);
+    free(s_pending_json);
+    s_pending_json = canon;
+    xSemaphoreGive(s_pending_lock);
+    esp_timer_stop(s_store_timer);
+    esp_timer_start_once(s_store_timer, STORE_DELAY_US);
+}
+
+static void store_discard(void)
+{
+    if (!s_pending_lock) return;
+    esp_timer_stop(s_store_timer);
+    xSemaphoreTake(s_pending_lock, portMAX_DELAY);
+    free(s_pending_json);
+    s_pending_json = NULL;
+    xSemaphoreGive(s_pending_lock);
+}
+
+// Pruefen, anwenden und (verzoegert) speichern. Bei Fehlern bleibt die bisherige Konfiguration unveraendert.
 static bool cfg_apply(const char *json, size_t len, char *err, size_t err_len)
 {
     ob_config_t *cfg = config_parse(json, len, err, err_len);
@@ -170,13 +219,7 @@ static bool cfg_apply(const char *json, size_t len, char *err, size_t err_len)
         config_free(cfg);
         return false;
     }
-    esp_err_t se = config_store(canon, strlen(canon));
-    free(canon);
-    if (se != ESP_OK) {
-        snprintf(err, err_len, "Speichern fehlgeschlagen: %s", esp_err_to_name(se));
-        config_free(cfg);
-        return false;
-    }
+    store_later(canon);          // gehoert ab hier dem Speicher-Timer
     ob_config_t *old = config_activate(cfg);
     ui_reload();                // die alte Konfiguration darf erst nach dem Neuaufbau freigegeben werden
     net_ha_resubscribe();       // Entitaeten koennen sich geaendert haben
@@ -216,6 +259,7 @@ static void handle_cfg_message(const char *type, const cJSON *root)
     if (!strcmp(type, "cfg_get")) {
         cfg_send_to_pc();
     } else if (!strcmp(type, "cfg_reset")) {
+        store_discard();
         config_erase();
         ob_config_t *old = config_activate(NULL);
         ui_reload();
@@ -304,6 +348,31 @@ static void handle_line(const char *line)
         // Zustand des PCs vom Programm: {"t":"pc","away":true} (schlaeft, gesperrt, wird heruntergefahren) oder false
         const cJSON *away = cJSON_GetObjectItem(root, "away");
         if (cJSON_IsBool(away)) ui_set_pc_away(cJSON_IsTrue(away));
+    } else if (!strcmp(type, "press")) {
+        // Vorfuehrmodus im PC-Editor: {"t":"press","p":Seite,"i":Kachel} (ab 0)
+        const cJSON *pp = cJSON_GetObjectItem(root, "p"), *pi = cJSON_GetObjectItem(root, "i");
+        if (cJSON_IsNumber(pp) && cJSON_IsNumber(pi)) ui_press_tile(pp->valueint, pi->valueint);
+    } else if (!strcmp(type, "page")) {
+        // Der Editor im PC-Programm zeigt eine andere Seite: {"t":"page","i":2} (ab 0)
+        const cJSON *pi = cJSON_GetObjectItem(root, "i");
+        const cJSON *pk = cJSON_GetObjectItem(root, "c");
+        if (cJSON_IsNumber(pi)) ui_show_page(pi->valueint, cJSON_IsTrue(pk));
+    } else if (!strcmp(type, "radio")) {
+        // Radio-Player des PC-Programms: {"t":"radio","st":"Sender","ti":"Interpret - Titel","on":true}
+        const cJSON *st = cJSON_GetObjectItem(root, "st"), *ti = cJSON_GetObjectItem(root, "ti"), *on = cJSON_GetObjectItem(root, "on");
+        ui_set_radio(cJSON_IsString(st) ? st->valuestring : "", cJSON_IsString(ti) ? ti->valuestring : "", cJSON_IsTrue(on));
+    } else if (!strcmp(type, "img")) {
+        // Senderlogo in Stuecken: {"t":"img","k":"radio","w":128,"h":128,"o":Versatz,"d":"Base64"}; w = 0: kein Logo
+        const cJSON *k = cJSON_GetObjectItem(root, "k"), *w = cJSON_GetObjectItem(root, "w"), *h = cJSON_GetObjectItem(root, "h");
+        const cJSON *o = cJSON_GetObjectItem(root, "o"), *d = cJSON_GetObjectItem(root, "d");
+        if (cJSON_IsString(k) && !strcmp(k->valuestring, "radio") && cJSON_IsNumber(w) && cJSON_IsNumber(h) && cJSON_IsNumber(o)) {
+            uint8_t raw[640];
+            size_t olen = 0;
+            if (cJSON_IsString(d) && d->valuestring[0] &&
+                mbedtls_base64_decode(raw, sizeof(raw), &olen, (const unsigned char *)d->valuestring, strlen(d->valuestring)) != 0)
+                olen = 0;
+            ui_radio_image(w->valueint, h->valueint, o->valueint, raw, (int)olen);
+        }
     } else if (!strcmp(type, "cal")) {
         // Kalendertermine vom PC-Programm: {"t":"cal","e":[["2026-11-17","18:30","Titel"],["2026-11-18","","Ganztaegig"]]}
         const cJSON *arr = cJSON_GetObjectItem(root, "e");
@@ -428,7 +497,7 @@ static void link_task(void *arg)
 
 esp_err_t pclink_start(void)
 {
-    s_queue = xQueueCreate(8, sizeof(char *));
+    s_queue = xQueueCreate(32, sizeof(char *));
     s_tx_mutex = xSemaphoreCreateMutex();
     if (!s_queue || !s_tx_mutex) return ESP_ERR_NO_MEM;
 

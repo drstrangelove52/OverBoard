@@ -10,9 +10,9 @@
 // (siehe docs/config.md). Es gibt eine eingebaute Standardkonfiguration; eine per USB uebertragene Konfiguration
 // wird im Flash gespeichert und ersetzt sie.
 
-typedef enum { TILE_VALUE, TILE_BUTTON, TILE_CALENDAR } tile_type_t;   // Anzeige-, Button- oder Kalender-Kachel
+typedef enum { TILE_VALUE, TILE_BUTTON, TILE_CALENDAR, TILE_RADIO } tile_type_t;   // Anzeige-, Button-, Kalender- oder Radio-Kachel
 typedef enum { FMT_POWER, FMT_KWH, FMT_STATUS, FMT_ONOFF, FMT_TEXT, FMT_PERCENT, FMT_TIME } fmt_t;
-typedef enum { TRIG_NONE, TRIG_TAP, TRIG_HOLD, TRIG_CONFIRM } trigger_t;   // Tippen, Halten, Tippen mit Rueckfrage
+typedef enum { TRIG_NONE, TRIG_TAP, TRIG_HOLD, TRIG_CONFIRM, TRIG_REPEAT } trigger_t;   // Tippen, Halten, Tippen mit Rueckfrage, bei gedrueckter Taste wiederholen
 
 typedef struct {
     tile_type_t type;

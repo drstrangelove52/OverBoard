@@ -124,9 +124,9 @@ void config_free(ob_config_t *cfg)
 // ================================================================================================
 // Namen der Aufzaehlungen
 // ================================================================================================
-static const char *const k_type_names[] = { "value", "button", "calendar" };
+static const char *const k_type_names[] = { "value", "button", "calendar", "radio" };
 static const char *const k_fmt_names[] = { "power", "kwh", "status", "onoff", "text", "percent", "time" };
-static const char *const k_trig_names[] = { "none", "tap", "hold", "confirm" };
+static const char *const k_trig_names[] = { "none", "tap", "hold", "confirm", "repeat" };
 #define COUNT(a) ((int)(sizeof(a) / sizeof((a)[0])))
 
 static int find_name(const char *s, const char *const *names, int n)
@@ -376,7 +376,7 @@ ob_config_t *config_parse(const char *json, size_t len, char *err, size_t err_le
 
             const cJSON *ty = cJSON_GetObjectItem(tj, "type");
             int type = cJSON_IsString(ty) ? find_name(ty->valuestring, k_type_names, COUNT(k_type_names)) : -1;
-            if (type < 0) FAIL("%s: 'type' muss \"value\", \"button\" oder \"calendar\" sein", where);
+            if (type < 0) FAIL("%s: 'type' muss \"value\", \"button\", \"calendar\" oder \"radio\" sein", where);
             tc->type = (tile_type_t)type;
 
             int x, y, w, h;
@@ -432,7 +432,7 @@ ob_config_t *config_parse(const char *json, size_t len, char *err, size_t err_le
             int trig = TRIG_NONE;
             if (tr) {
                 trig = cJSON_IsString(tr) ? find_name(tr->valuestring, k_trig_names, COUNT(k_trig_names)) : -1;
-                if (trig < 0) FAIL("%s: unbekannter 'trigger' (none, tap, hold, confirm)", where);
+                if (trig < 0) FAIL("%s: unbekannter 'trigger' (none, tap, hold, confirm, repeat)", where);
             }
             tc->trigger = (trigger_t)trig;
 
@@ -446,6 +446,10 @@ ob_config_t *config_parse(const char *json, size_t len, char *err, size_t err_le
                 if (!cJSON_IsString(ac) || strncmp(ac->valuestring, "pc:", 3) || !id_chars_ok(ac->valuestring + 3, 31))
                     FAIL("%s: 'action' muss \"pc:<Kennung>\" sein", where);
                 tc->action = a_strdup(ar, ac->valuestring);
+            }
+            if (tc->type == TILE_RADIO) {                 // Radio-Kachel: Tippen startet oder stoppt den Player auf dem PC
+                if (tc->trigger == TRIG_NONE) tc->trigger = TRIG_TAP;
+                if (!tc->action) tc->action = a_strdup(ar, "pc:radio.toggle");
             }
 
             if (tc->type == TILE_BUTTON && tc->trigger != TRIG_NONE) {
