@@ -123,6 +123,27 @@ public sealed class AgentCore : IDisposable
         return (ok, error, false);
     }
 
+    private readonly object _volumeGate = new();
+    private string _lastVolumeId = "";
+    private long _lastVolumeAt;
+
+    /// <summary>
+    /// Bei gedrückt gehaltener Taste kommt die Aktion zehnmal pro Sekunde. Wer es langsamer will, stellt "Änderungen pro Sekunde" ein:
+    /// Aktionen, die schneller hintereinander kommen, werden übersprungen (mit etwas Spielraum für das Zeitraster des Geräts).
+    /// </summary>
+    private bool VolumeAllowed(string id)
+    {
+        var gap = 1000 / Math.Clamp(Settings.VolumeRate, 1, 10) - 20;
+        var now = Environment.TickCount64;
+        lock (_volumeGate)
+        {
+            if (id == _lastVolumeId && now - _lastVolumeAt < gap) return false;
+            _lastVolumeId = id;
+            _lastVolumeAt = now;
+            return true;
+        }
+    }
+
     /// <summary>Führt die Aktion mit dieser Kennung aus (eingebaut oder selbst definiert). Liefert false bei Fehlern.</summary>
     public bool Run(string id)
     {
@@ -131,8 +152,8 @@ public sealed class AgentCore : IDisposable
         {
             switch (id)
             {
-                case "volume.up": Platform.AdjustVolume(+Settings.VolumeStep); return true;
-                case "volume.down": Platform.AdjustVolume(-Settings.VolumeStep); return true;
+                case "volume.up": if (VolumeAllowed(id)) Platform.AdjustVolume(+Settings.VolumeStep); return true;
+                case "volume.down": if (VolumeAllowed(id)) Platform.AdjustVolume(-Settings.VolumeStep); return true;
                 case "mute.toggle": Platform.ToggleMute(); return true;
                 case "mic.toggle": Platform.ToggleMicMute(); return true;
                 case "lock": Platform.LockWorkstation(); return true;

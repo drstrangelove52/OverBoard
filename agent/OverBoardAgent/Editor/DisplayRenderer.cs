@@ -262,6 +262,10 @@ public static class DisplayRenderer
         {
             AddRadioTile(inner, t, th, w, h, title, radio);
         }
+        else if (t.IsChart)
+        {
+            AddChartTile(inner, t, th, language, w, h, title, hasLive ? ValueFormatter.Format(t, liveState, language) : null);
+        }
         else if (!t.IsButton)
         {
             var narrow = w < 150;
@@ -323,6 +327,42 @@ public static class DisplayRenderer
             playing ? th.Accent : th.Title, s => new Point(w - Pad - s.Width, h - Pad - s.Height));
     }
 
+    /// <summary>Verlaufs-Kachel: Titel links, aktueller Wert rechts, darunter die Linie (hier eine Beispiellinie). Masse wie in ui.c.</summary>
+    private static void AddChartTile(Canvas inner, TileModel t, ThemeColors th, string language, double w, double h, string title, string? live)
+    {
+        var narrow = w < 150;
+        PutText(inner, title, TextFont, narrow ? 14 : 20, th.Title, _ => new Point(Pad, Pad));
+        var top = narrow ? 24 : 38;
+        var value = live ?? ValueFormatter.Format(t, SampleChartValue(t), language);
+        var size = FitFont(value, (w - 2 * Pad) * 0.55, top);
+        PutText(inner, value, TextFont, size, th.Value, s => new Point(w - Pad - s.Width, Pad));
+
+        var cw = w - 2 * Pad;
+        var ch = h - 2 * Pad - top;
+        if (cw < 10 || ch < 10) return;
+        var y0 = Pad + top;
+        // feine waagrechte Linien (3 Teiler wie auf dem Display)
+        for (var i = 1; i <= 3; i++)
+            Put(inner, new Rectangle { Width = cw, Height = 1, Fill = new SolidColorBrush(th.Nav) }, Pad, y0 + ch * i / 4.0);
+        // Beispiellinie
+        var points = new List<Point>();
+        for (var i = 0; i < 60; i++)
+        {
+            var v = 0.5 + 0.28 * Math.Sin(i / 6.0) + 0.14 * Math.Sin(i / 2.3 + 1);
+            points.Add(new Point(Pad + cw * i / 59.0, y0 + ch * (1 - Math.Clamp(v, 0.05, 0.95))));
+        }
+        Put(inner, new Avalonia.Controls.Shapes.Polyline { Points = points, Stroke = new SolidColorBrush(th.Accent), StrokeThickness = 2, StrokeLineCap = PenLineCap.Round }, 0, 0);
+    }
+
+    private static string SampleChartValue(TileModel t) => t.Source switch
+    {
+        "pc:cpu" => "14",
+        "pc:ram" => "60",
+        "pc:net_down" => "12.4",
+        "pc:net_up" => "2.1",
+        _ => t.EffectiveFormat switch { "percent" => "42", "power" => "1520", "kwh" => "12.5", "mbit" => "12.4", _ => "21.5" },
+    };
+
     private const double CalRowH = 30;     // gleich wie in der Firmware (ui.c)
 
     private static void AddCalendarTile(Canvas inner, TileModel t, ThemeColors th, string language, double w, double h, string title,
@@ -365,10 +405,14 @@ public static class DisplayRenderer
         new(today.AddDays(6).ToString("yyyy-MM-dd"), "", "Müllabfuhr"),
     ];
 
+    /// <summary>Breite einer Seitentaste: höchstens 220, bei vielen Seiten schmaler, damit alle in die Zeile passen (wie in ui.c).</summary>
+    public static double NavButtonWidth(int pages) => Math.Min(220.0, (GridW - (Math.Max(1, pages) - 1) * 16) / (double)Math.Max(1, pages));
+
     private static void AddNav(Canvas root, ConfigModel cfg, int active, ThemeColors th)
     {
         var n = cfg.Pages.Count;
-        var total = n * 220 + (n - 1) * 16;
+        var bw = NavButtonWidth(n);
+        var total = n * bw + (n - 1) * 16;
         var x = GridX + (GridW - total) / 2.0;
         for (var i = 0; i < n; i++)
         {
@@ -377,20 +421,28 @@ public static class DisplayRenderer
             var fg = isActive ? th.OnAccent : th.Value;
             var btn = new Border
             {
-                Width = 220, Height = NavH, CornerRadius = new CornerRadius(28), IsHitTestVisible = false,
+                Width = bw, Height = NavH, CornerRadius = new CornerRadius(28), IsHitTestVisible = false,
                 Background = new SolidColorBrush(isActive ? th.Accent : th.Nav),
             };
-            var c = new Canvas { Width = 220, Height = NavH };
+            var c = new Canvas { Width = bw, Height = NavH };
             btn.Child = c;
             var icon = MdiIcons.Glyph(page.Icon ?? "help-circle");
             var title = page.Title.Get(cfg.Language);
             var iconSize = Measure(icon, IconFont, 28);
             var titleSize = Measure(title, TextFont, 20);
-            var startX = (220 - (iconSize.Width + 10 + titleSize.Width)) / 2;
+            var room = bw - iconSize.Width - 10 - 20;                     // Platz für den Titel (mit etwas Rand)
+            var titleWidth = Math.Min(titleSize.Width, Math.Max(0, room));
+            var startX = (bw - (iconSize.Width + 10 + titleWidth)) / 2;
             Put(c, Label(icon, IconFont, 28, fg), startX, (NavH - iconSize.Height) / 2);
-            Put(c, Label(title, TextFont, 20, fg), startX + iconSize.Width + 10, (NavH - titleSize.Height) / 2);
+            if (titleWidth > 8)
+            {
+                var label = Label(title, TextFont, 20, fg);
+                label.Width = titleWidth;
+                label.TextTrimming = TextTrimming.CharacterEllipsis;
+                Put(c, label, startX + iconSize.Width + 10, (NavH - titleSize.Height) / 2);
+            }
             Put(root, btn, x, NavY);
-            x += 220 + 16;
+            x += bw + 16;
         }
     }
 

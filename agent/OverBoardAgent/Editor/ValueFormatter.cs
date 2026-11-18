@@ -35,6 +35,8 @@ public static class ValueFormatter
                 if (w >= 1000f || w <= -1000f) return (w / 1000f).ToString("0.00", CultureInfo.InvariantCulture) + " kW";
                 return ((int)(w + (w >= 0 ? 0.5f : -0.5f))).ToString(CultureInfo.InvariantCulture) + " W";
             }
+            case "mbit":
+                return Num(state).ToString("0.0", CultureInfo.InvariantCulture) + " Mbit/s";
             case "kwh":
                 return Num(state).ToString("0.0", CultureInfo.InvariantCulture) + " kWh";
             case "percent":

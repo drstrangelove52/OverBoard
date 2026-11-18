@@ -10,8 +10,6 @@
                     <TextBlock x:Name="LanguageLabel" FontSize="12" Opacity="0.7" />
                     <ComboBox x:Name="LanguageBox" Width="220" />
                     <CheckBox x:Name="AutostartBox" Margin="0,8,0,0" />
-                    <TextBlock x:Name="VolumeStepLabel" FontSize="12" Opacity="0.7" Margin="0,8,0,0" />
-                    <NumericUpDown x:Name="VolumeStepBox" Minimum="1" Maximum="20" Increment="1" FormatString="0" Width="220" HorizontalAlignment="Left" />
                 </StackPanel>
             </Border>
 

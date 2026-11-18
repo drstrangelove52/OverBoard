@@ -1,0 +1,87 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="OverBoardAgent.ConnectionsView">
+    <ScrollViewer>
+        <StackPanel Spacing="12" Margin="28" MaxWidth="760" HorizontalAlignment="Left">
+            <TextBlock x:Name="ConnHeader" FontSize="20" FontWeight="SemiBold" />
+            <TextBlock x:Name="ConnHint" FontSize="13" Opacity="0.7" TextWrapping="Wrap" />
+
+            <Border Padding="16" CornerRadius="8" BorderThickness="1" BorderBrush="#30808080" Background="#10808080">
+                <StackPanel Spacing="6">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                        <TextBlock x:Name="WifiIcon" FontSize="20" VerticalAlignment="Center" />
+                        <TextBlock x:Name="WifiTitle" Grid.Column="1" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <TextBlock x:Name="WifiStatus" Grid.Column="2" VerticalAlignment="Center" />
+                    </Grid>
+                    <TextBlock x:Name="WifiSsidLabel" FontSize="12" Opacity="0.7" Margin="0,6,0,0" />
+                    <TextBox x:Name="WifiSsidBox" />
+                    <TextBlock x:Name="WifiPassLabel" FontSize="12" Opacity="0.7" />
+                    <TextBox x:Name="WifiPassBox" PasswordChar="●" />
+                    <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,6,0,0">
+                        <Button x:Name="WifiSave" Classes="accent" />
+                        <TextBlock x:Name="WifiResult" VerticalAlignment="Center" TextWrapping="Wrap" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <Border Padding="16" CornerRadius="8" BorderThickness="1" BorderBrush="#30808080" Background="#10808080">
+                <StackPanel Spacing="6">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                        <TextBlock x:Name="HaIcon" FontSize="20" VerticalAlignment="Center" />
+                        <TextBlock x:Name="HaTitle" Grid.Column="1" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <TextBlock x:Name="HaStatus" Grid.Column="2" VerticalAlignment="Center" />
+                    </Grid>
+                    <TextBlock x:Name="HaUrlLabel" FontSize="12" Opacity="0.7" Margin="0,6,0,0" />
+                    <TextBox x:Name="HaUrlBox" />
+                    <TextBlock x:Name="HaTokenLabel" FontSize="12" Opacity="0.7" />
+                    <TextBox x:Name="HaTokenBox" PasswordChar="●" />
+                    <TextBlock x:Name="HaHint" FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,6,0,0">
+                        <Button x:Name="HaTest" />
+                        <Button x:Name="HaSave" Classes="accent" />
+                        <TextBlock x:Name="HaResult" VerticalAlignment="Center" TextWrapping="Wrap" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <Border Padding="16" CornerRadius="8" BorderThickness="1" BorderBrush="#30808080" Background="#10808080">
+                <StackPanel Spacing="6">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                        <TextBlock x:Name="MqttIcon" FontSize="20" VerticalAlignment="Center" />
+                        <TextBlock x:Name="MqttTitle" Grid.Column="1" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <TextBlock x:Name="MqttStatus" Grid.Column="2" VerticalAlignment="Center" />
+                    </Grid>
+                    <TextBlock x:Name="MqttHint" FontSize="12" Opacity="0.65" TextWrapping="Wrap" />
+                    <TextBlock x:Name="MqttHostLabel" FontSize="12" Opacity="0.7" Margin="0,6,0,0" />
+                    <TextBox x:Name="MqttHostBox" />
+                    <TextBlock x:Name="MqttUserLabel" FontSize="12" Opacity="0.7" />
+                    <TextBox x:Name="MqttUserBox" />
+                    <TextBlock x:Name="MqttPassLabel" FontSize="12" Opacity="0.7" />
+                    <TextBox x:Name="MqttPassBox" PasswordChar="●" />
+                    <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,6,0,0">
+                        <Button x:Name="MqttSave" Classes="accent" />
+                        <TextBlock x:Name="MqttResult" VerticalAlignment="Center" TextWrapping="Wrap" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <Border Padding="16" CornerRadius="8" BorderThickness="1" BorderBrush="#30808080" Background="#10808080">
+                <StackPanel Spacing="6">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                        <TextBlock x:Name="CalIcon" FontSize="20" VerticalAlignment="Center" />
+                        <TextBlock x:Name="CalTitle" Grid.Column="1" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <TextBlock x:Name="CalStatus" Grid.Column="2" VerticalAlignment="Center" />
+                    </Grid>
+                    <TextBlock x:Name="CalHint" FontSize="12" Opacity="0.65" TextWrapping="Wrap" />
+                    <TextBlock x:Name="CalUrlLabel" FontSize="12" Opacity="0.7" Margin="0,6,0,0" />
+                    <TextBox x:Name="CalUrlBox" PasswordChar="●" />
+                    <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,6,0,0">
+                        <Button x:Name="CalSave" Classes="accent" />
+                        <Button x:Name="CalRemove" />
+                        <TextBlock x:Name="CalResult" VerticalAlignment="Center" TextWrapping="Wrap" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

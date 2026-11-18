@@ -35,6 +35,9 @@ public static class Settings
     /// <summary>Wie viele Prozentpunkte die Lautstärke pro Tastendruck (Lauter/Leiser) ändert.</summary>
     public static int VolumeStep { get; set; } = 5;
 
+    /// <summary>Wie oft pro Sekunde die Lautstärke bei gedrückt gehaltener Taste höchstens geändert wird (1 bis 10).</summary>
+    public static int VolumeRate { get; set; } = 10;
+
     /// <summary>Täglich (höchstens einmal) auf GitHub nach einer neuen Version suchen.</summary>
     public static bool UpdateCheck { get; set; } = true;
     public static long LastUpdateCheckUtc { get; set; }
@@ -80,6 +83,7 @@ public static class Settings
             MqttPassword = Unprotect(Str(r, "mqtt_pass"));
             CalendarUrl = Unprotect(Str(r, "calendar_url"));
             if (r.TryGetProperty("volume_step", out var vs) && vs.ValueKind == JsonValueKind.Number) VolumeStep = Math.Clamp(vs.GetInt32(), 1, 20);
+            if (r.TryGetProperty("volume_rate", out var vr) && vr.ValueKind == JsonValueKind.Number) VolumeRate = Math.Clamp(vr.GetInt32(), 1, 10);
             if (r.TryGetProperty("window_w", out var ww) && ww.ValueKind == JsonValueKind.Number) WindowWidth = ww.GetDouble();
             if (r.TryGetProperty("window_h", out var wh) && wh.ValueKind == JsonValueKind.Number) WindowHeight = wh.GetDouble();
             if (r.TryGetProperty("update_check", out var uc) && uc.ValueKind is JsonValueKind.True or JsonValueKind.False) UpdateCheck = uc.GetBoolean();
@@ -108,6 +112,7 @@ public static class Settings
                 mqtt_pass = Protect(MqttPassword),
                 calendar_url = Protect(CalendarUrl),
                 volume_step = VolumeStep,
+                volume_rate = VolumeRate,
                 window_w = WindowWidth,
                 window_h = WindowHeight,
                 update_check = UpdateCheck,

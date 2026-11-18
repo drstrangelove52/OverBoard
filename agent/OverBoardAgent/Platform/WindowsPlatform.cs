@@ -115,9 +115,100 @@ public sealed class WindowsPlatform : IPlatform
 
     private void OnSessionEnding(object? sender, SessionEndingEventArgs e) => SetAway(true);   // Herunterfahren oder Abmelden
 
+    // ---- Auslastung (CPU, Arbeitsspeicher, Netzwerk): jede Sekunde gemessen und gemeldet, wenn sie sich geändert hat ----
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct MemoryStatus
+    {
+        public uint Length, MemoryLoad;
+        public ulong TotalPhys, AvailPhys, TotalPageFile, AvailPageFile, TotalVirtual, AvailVirtual, AvailExtendedVirtual;
+    }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern bool GetSystemTimes(out long idle, out long kernel, out long user);
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern bool GlobalMemoryStatusEx(ref MemoryStatus status);
+
+    private readonly Timer _metrics;
+    private long _cpuIdle, _cpuTotal;
+    private long _netDown, _netUp;
+    private DateTime _netAt;
+
+    /// <summary>Summe der Zähler aller aktiven Netzwerkadapter (ohne Loopback und Tunnel).</summary>
+    private static (long Down, long Up) NetworkTotals()
+    {
+        long down = 0, up = 0;
+        foreach (var nic in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces())
+        {
+            if (nic.OperationalStatus != System.Net.NetworkInformation.OperationalStatus.Up) continue;
+            if (nic.NetworkInterfaceType is System.Net.NetworkInformation.NetworkInterfaceType.Loopback or System.Net.NetworkInformation.NetworkInterfaceType.Tunnel) continue;
+            var stats = nic.GetIPv4Statistics();
+            down += stats.BytesReceived;
+            up += stats.BytesSent;
+        }
+        return (down, up);
+    }
+
+    private void PublishMetric(string id, string value)
+    {
+        string? old;
+        lock (_cacheGate) _cache.TryGetValue(id, out old);
+        if (old == value) return;
+        SetCache(id, value);
+        Raise(id, value);
+    }
+
+    private void SampleMetrics()
+    {
+        try
+        {
+            // CPU: Anteil der Nicht-Leerlaufzeit seit der letzten Messung
+            if (GetSystemTimes(out var idle, out var kernel, out var user))
+            {
+                var total = kernel + user;                       // kernel enthält die Leerlaufzeit
+                if (_cpuTotal > 0)
+                {
+                    var dTotal = total - _cpuTotal;
+                    var dIdle = idle - _cpuIdle;
+                    if (dTotal > 0) PublishMetric("cpu", Math.Clamp((int)Math.Round(100.0 * (dTotal - dIdle) / dTotal), 0, 100).ToString());
+                }
+                _cpuTotal = total;
+                _cpuIdle = idle;
+            }
+
+            // Arbeitsspeicher: belegter Anteil
+            var mem = new MemoryStatus { Length = (uint)System.Runtime.InteropServices.Marshal.SizeOf<MemoryStatus>() };
+            if (GlobalMemoryStatusEx(ref mem)) PublishMetric("ram", mem.MemoryLoad.ToString());
+
+            // Netzwerk: Mbit/s seit der letzten Messung
+            var (down, up) = NetworkTotals();
+            var now = DateTime.UtcNow;
+            if (_netAt != default)
+            {
+                var seconds = (now - _netAt).TotalSeconds;
+                if (seconds > 0.2)
+                {
+                    string Mbit(long delta) => (Math.Max(0, delta) * 8.0 / 1_000_000.0 / seconds).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+                    PublishMetric("net_down", Mbit(down - _netDown));
+                    PublishMetric("net_up", Mbit(up - _netUp));
+                }
+            }
+            _netDown = down;
+            _netUp = up;
+            _netAt = now;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Messwerte: {ex.Message}");
+        }
+    }
+
     public WindowsPlatform()
     {
         Attach();
+        SampleMetrics();
+        _metrics = new Timer(_ => SampleMetrics(), null, 1000, 1000);
         SystemEvents.PowerModeChanged += OnPowerMode;
         SystemEvents.SessionSwitch += OnSessionSwitch;
         SystemEvents.SessionEnding += OnSessionEnding;
@@ -297,6 +388,7 @@ public sealed class WindowsPlatform : IPlatform
 
     public void Dispose()
     {
+        _metrics.Dispose();
         SystemEvents.PowerModeChanged -= OnPowerMode;
         SystemEvents.SessionSwitch -= OnSessionSwitch;
         SystemEvents.SessionEnding -= OnSessionEnding;

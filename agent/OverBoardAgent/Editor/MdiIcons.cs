@@ -6,6 +6,9 @@ namespace OverBoardAgent.Editor;
 /// <summary>Material Design Icons: Name → Unicode-Codepunkt (Liste aus Assets/mdi-icons.tsv, dieselbe wie in der Firmware).</summary>
 public static class MdiIcons
 {
+    /// <summary>Schrift mit den Symbolen (Material Design Icons).</summary>
+    public static readonly Avalonia.Media.FontFamily Font = new("avares://OverBoardAgent/Assets/Fonts#Material Design Icons");
+
     private static Dictionary<string, int>? _codes;
     private static List<string>? _names;
 

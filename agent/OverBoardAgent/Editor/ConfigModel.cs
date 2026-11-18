@@ -56,7 +56,7 @@ public sealed class LTextConverter : JsonConverter<LText>
 
 public sealed class TileModel
 {
-    [JsonPropertyName("type"), JsonPropertyOrder(1)] public string Type { get; set; } = "button";   // value | button | calendar | radio
+    [JsonPropertyName("type"), JsonPropertyOrder(1)] public string Type { get; set; } = "button";   // value | button | calendar | radio | chart
     [JsonPropertyName("x"), JsonPropertyOrder(2)] public int X { get; set; }
     [JsonPropertyName("y"), JsonPropertyOrder(3)] public int Y { get; set; }
     [JsonPropertyName("w"), JsonPropertyOrder(4)] public int W { get; set; } = 1;
@@ -73,8 +73,19 @@ public sealed class TileModel
     public bool IsButton => Type == "button";
     public bool IsCalendar => Type == "calendar";
     public bool IsRadio => Type == "radio";
+    public bool IsChart => Type == "chart";
+
+    /// <summary>Verlauf: Zeitraum der Linie in Sekunden (die Linie hat 60 Punkte). Standard 120.</summary>
+    [JsonPropertyName("span"), JsonPropertyOrder(14)] public int? Span { get; set; }
     public string EffectiveFormat => Format ?? (IsButton ? "onoff" : "text");
     public string EffectiveTrigger => Trigger ?? "none";
+
+    /// <summary>Eine unabhängige Kopie (für Kopieren, Ausschneiden und Einfügen).</summary>
+    public TileModel Clone() => new()
+    {
+        Type = Type, X = X, Y = Y, W = W, H = H, Source = Source, Title = new LText(Title.De, Title.En), Icon = Icon, Format = Format,
+        Max = Max, Trigger = Trigger, HoldMs = HoldMs, Action = Action, Span = Span,
+    };
 
     /// <summary>Leere Texte als "nicht gesetzt" behandeln, damit das JSON schlank bleibt.</summary>
     public void Normalize()
@@ -87,10 +98,13 @@ public sealed class TileModel
         if (string.IsNullOrWhiteSpace(Action)) Action = null;
         if (Max is <= 0) Max = null;
         if (HoldMs is <= 0) HoldMs = null;
+        // Lauter und Leiser ändern bei gedrückt gehaltener Taste weiter (ein kurzes Tippen bleibt ein einzelner Schritt)
+        if (IsButton && Action is "pc:volume.up" or "pc:volume.down" && Trigger == "tap") Trigger = "repeat";
         // Stumm-Tasten leuchten von selbst nach dem Zustand, den sie umschalten (auch ältere Tasten ohne Quelle)
         if (IsButton && Source == null)
             Source = Action switch { "pc:mute.toggle" => "pc:mute", "pc:mic.toggle" => "pc:mic_mute", _ => null };
         if (IsCalendar || IsRadio) { Source = null; Format = null; Max = null; }
+        if (IsChart) { if (Span is null or < 10) Span = 120; if (Span > 86400) Span = 86400; } else Span = null;
         if (IsRadio) { Trigger = "tap"; Action ??= "pc:radio.toggle"; HoldMs = null; }
         else if (!IsButton)
         {
@@ -190,8 +204,8 @@ public static class ConfigValidator
     public const int MaxPages = 8;
     public const int MaxTiles = 48;
 
-    private static readonly string[] Types = ["value", "button", "calendar", "radio"];
-    private static readonly string[] Formats = ["power", "kwh", "status", "onoff", "text", "percent", "time"];
+    private static readonly string[] Types = ["value", "button", "calendar", "radio", "chart"];
+    private static readonly string[] Formats = ["power", "kwh", "status", "onoff", "text", "percent", "time", "mbit"];
     private static readonly string[] Triggers = ["none", "tap", "hold", "confirm", "repeat"];
 
     public static List<string> Validate(ConfigModel c)

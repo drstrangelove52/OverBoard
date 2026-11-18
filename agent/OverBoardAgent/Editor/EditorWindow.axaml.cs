@@ -17,11 +17,11 @@ public partial class EditorWindow : Window
 {
     private static readonly FontFamily IconFont = new("avares://OverBoardAgent/Assets/Fonts#Material Design Icons");
 
-    private static readonly string[] FormatIds = ["power", "kwh", "status", "onoff", "text", "percent", "time"];
+    private static readonly string[] FormatIds = ["power", "kwh", "status", "onoff", "text", "percent", "time", "mbit"];
     private static readonly (string De, string En)[] FormatNames =
     [
         ("Leistung (kW)", "Power (kW)"), ("Energie (kWh)", "Energy (kWh)"), ("Status", "Status"),
-        ("An / Aus", "On / Off"), ("Text", "Text"), ("Prozent", "Percent"), ("Uhrzeit", "Time"),
+        ("An / Aus", "On / Off"), ("Text", "Text"), ("Prozent", "Percent"), ("Uhrzeit", "Time"), ("Netzwerk (Mbit/s)", "Network (Mbit/s)"),
     ];
 
     private static readonly string[] TriggerIds = ["none", "tap", "hold", "confirm", "repeat"];
@@ -83,7 +83,14 @@ public partial class EditorWindow : Window
         ActionsPage.Init(core);
         RadioPage.Init(core);
         ActionsPage.UsedBy = ActionUsage;
-        SetupPage.Init(core);
+        StartPage.Init(core);
+        StartPage.NavigateRequested += async i =>
+        {
+            if (i == 10) { ShowPage(1); await AddFromTemplateAsync(); }      // 10 = "Aus Vorlage starten"
+            else ShowPage(i);
+        };
+        StartPage.TileCount = () => _cfg.Pages.Count == 0 ? null : _cfg.Pages.Sum(p => p.Tiles.Count);
+        ConnectionsPage.Init(core);
         FirmwarePage.Init(core);
         AppPage.Init(core, OnAppLanguageChanged);
         ApplyTexts();
@@ -188,9 +195,12 @@ public partial class EditorWindow : Window
         Title = "OverBoard";
         AppTitle.Text = "OverBoard";
         for (var i = 0; i < _navLabels.Length; i++) _navLabels[i].Text = Strings.Get(NavKeys[i]);
-        DeviceHeader.Text = Strings.Get("nav.device");
+        ContentTabActions.Header = Strings.Get("tab.actions");
+        ContentTabRadio.Header = Strings.Get("tab.radio");
+        DevTabDevice.Header = Strings.Get("tab.device");
+        DevTabLook.Header = Strings.Get("tab.look");
+        DevTabPower.Header = Strings.Get("tab.power");
         ConnectionHeader.Text = T("Verbindung", "Connection");
-        SetupHeader.Text = T("Einrichtung", "Setup");
         FirmwareHeader.Text = T("Firmware", "Firmware");
         DisplayCardHeader.Text = T("Anzeige des Geräts", "Device display");
         DisplayCardHint.Text = T("Änderungen hier gehen sofort aufs Gerät (wie im Display-Editor). Die Sprache gilt nur für das Display, nicht für dieses Programm.",
@@ -229,13 +239,39 @@ public partial class EditorWindow : Window
 
         PagesLabel.Text = T("Seiten", "Pages");
         AddPageButton.Content = T("+ Seite", "+ Page");
+        PageSettingsButton.Content = Strings.Get("ed.page.edit");
+        TemplateButton.Content = Strings.Get("tpl.button");
+        ModeDesignBtn.Content = Strings.Get("ed.design");
+        ModeDemoBtn.Content = Strings.Get("ed.demo");
+        ToolTip.SetTip(MoreButton, Strings.Get("ed.more"));
+        TypeValueBtn.Content = Strings.Get("ed.type.value");
+        TypeChartBtn.Content = Strings.Get("ed.type.chart");
+        SpanLabel.Text = Strings.Get("ed.span");
+        FillCombo(SpanBox, SpanNames());
+        AddChartButton.Content = Strings.Get("ed.add.chart");
+        CopyTileButton.Content = Strings.Get("ed.copy");
+        CutTileButton.Content = Strings.Get("ed.cut");
+        UpdatePasteButton();
+        TypeButtonBtn.Content = Strings.Get("ed.type.button");
+        TypeCalBtn.Content = Strings.Get("ed.type.cal");
+        TypeRadioBtn.Content = Strings.Get("ed.type.radio");
+        ContentLabel.Text = Strings.Get("ed.content");
+        VolStepLabel.Text = Strings.Get("win.volstep");
+        VolRateLabel.Text = Strings.Get("win.volrate");
+        VolNote.Text = Strings.Get("ed.vol.note");
+        ModePcBtn.Content = Strings.Get("ed.mode.pc");
+        ModeHaBtn.Content = Strings.Get("ed.mode.ha");
+        AdvancedExpander.Header = Strings.Get("ed.advanced");
+        AddCalendarButton.Content = Strings.Get("ed.add.cal");
+        AddRadioButton.Content = Strings.Get("ed.add.radio");
+        UpdateLiveStatus();
         DeletePageButton.Content = T("Seite löschen", "Delete page");
         PageTitleDeLabel.Text = T("Titel der Seite", "Page title");
         PageIconLabel.Text = T("Symbol der Seite", "Page icon");
         PageRowsLabel.Text = T("Reihen auf dieser Seite", "Rows on this page");
-        AddLabel.Text = T("Neue Kachel", "New tile");
-        AddValueButton.Content = T("+ Anzeige-Kachel", "+ Display tile");
-        AddButtonButton.Content = T("+ Taste", "+ Button");
+        AddLabel.Text = Strings.Get("ed.add");
+        AddValueButton.Content = Strings.Get("ed.add.value");
+        AddButtonButton.Content = Strings.Get("ed.add.button");
 
         LanguageLabel.Text = T("Sprache des Displays", "Display language");
         ThemeLabel.Text = T("Farbdesign", "Colour theme");
@@ -252,7 +288,7 @@ public partial class EditorWindow : Window
         TitleDeLabel.Text = T("Titel", "Title");
         IconLabel.Text = T("Symbol (Name tippen, z. B. lightbulb)", "Icon (type a name, e.g. lightbulb)");
         SourceKindLabel.Text = T("Datenquelle", "Data source");
-        ButtonModeLabel.Text = T("Was die Taste tut", "What the button does");
+        ButtonModeLabel.Text = Strings.Get("ed.what");
         FillCombo(ButtonModeBox, [T("Aktion auf dem PC ausführen", "Run an action on the PC"), T("Home-Assistant-Entität umschalten", "Toggle a Home Assistant entity")]);
         AdvLightBox.Content = T("Erweitert: leuchtet nach einem anderen Zustand", "Advanced: lights up for a different state");
         SourceLabel.Text = T("Home-Assistant-Entität (z. B. sensor.xyz)", "Home Assistant entity (e.g. sensor.xyz)");
@@ -270,7 +306,7 @@ public partial class EditorWindow : Window
         OnBox.Content = T("In der Vorschau als „eingeschaltet“ zeigen", "Show as “on” in the preview");
         DeleteTileButton.Content = T("Kachel löschen", "Delete tile");
 
-        FillCombo(TypeBox, [T("Anzeige (Wert)", "Display (value)"), T("Taste", "Button"), T("Kalender (Termine)", "Calendar (events)"), T("Radio (Player)", "Radio (player)")]);
+        FillCombo(TypeBox, [T("Anzeige (Wert)", "Display (value)"), T("Taste", "Button"), T("Kalender (Termine)", "Calendar (events)"), T("Radio (Player)", "Radio (player)"), T("Verlauf (Linie)", "Chart (line)")]);
         FillCombo(FormatBox, FormatNames.Select(f => T(f.De, f.En)).ToList());
         FillCombo(TriggerBox, TriggerNames.Select(f => T(f.De, f.En)).ToList());
         FillCombo(LanguageBox, [T("Deutsch", "German"), T("Englisch", "English")]);
@@ -291,6 +327,10 @@ public partial class EditorWindow : Window
         ("volume", "Lautstärke", "Volume", "percent"),
         ("mute", "Stumm", "Muted", "onoff"),
         ("mic_mute", "Mikrofon stumm", "Microphone muted", "onoff"),
+        ("cpu", "CPU-Auslastung", "CPU load", "percent"),
+        ("ram", "Arbeitsspeicher", "Memory", "percent"),
+        ("net_down", "Netzwerk: Download", "Network: download", "mbit"),
+        ("net_up", "Netzwerk: Upload", "Network: upload", "mbit"),
     ];
 
     // Arten der Datenquelle: Tasten haben zusätzlich "Keine" (die Taste löst nur etwas aus und leuchtet nie)
@@ -319,6 +359,9 @@ public partial class EditorWindow : Window
         _ => null,
     };
 
+    private static readonly int[] SpanSeconds = [60, 120, 300, 900, 3600, 21600, 86400];
+    private static string[] SpanNames() => [T("1 Minute", "1 minute"), T("2 Minuten", "2 minutes"), T("5 Minuten", "5 minutes"), T("15 Minuten", "15 minutes"), T("1 Stunde", "1 hour"), T("6 Stunden", "6 hours"), T("24 Stunden", "24 hours")];
+
     private static bool IsPcSource(string? source) => source != null && source.StartsWith("pc:", StringComparison.Ordinal);
 
     private static string? GuessFormat(HaEntity e) => e.Id is "pc:mute" or "pc:mic_mute" ? "onoff" : e.DeviceClass == "timestamp" ? "time" : e.Unit switch
@@ -335,7 +378,7 @@ public partial class EditorWindow : Window
         if (!withPc && (string.IsNullOrWhiteSpace(Settings.HaToken) || string.IsNullOrWhiteSpace(Settings.HaUrl)))
         {
             Status(Strings.Get("ha.err.token"), error: true);
-            ShowPage(2);                     // Seite "Gerät": dort sind Adresse und Token
+            ShowPage(3);                     // Seite "Verbindungen": dort sind Adresse und Token
             return null;
         }
         // Werte des PCs stehen immer zur Wahl, Home-Assistant-Entitäten zusätzlich, wenn Home Assistant eingerichtet ist
@@ -346,6 +389,10 @@ public partial class EditorWindow : Window
             new("pc:volume", T("PC: Lautstärke", "PC: volume"), S("volume"), "%", ""),
             new("pc:mute", T("PC: Stumm", "PC: muted"), S("mute"), "", ""),
             new("pc:mic_mute", T("PC: Mikrofon stumm", "PC: microphone muted"), S("mic_mute"), "", ""),
+            new("pc:cpu", T("PC: CPU-Auslastung", "PC: CPU load"), S("cpu"), "%", ""),
+            new("pc:ram", T("PC: Arbeitsspeicher", "PC: memory"), S("ram"), "%", ""),
+            new("pc:net_down", T("PC: Netzwerk Download", "PC: network download"), S("net_down"), "Mbit/s", ""),
+            new("pc:net_up", T("PC: Netzwerk Upload", "PC: network upload"), S("net_up"), "Mbit/s", ""),
         };
         return await new EntityPickerWindow(withPc ? pc : null).ShowDialog<HaEntity?>(this);
     }
@@ -433,7 +480,11 @@ public partial class EditorWindow : Window
         SendButton.Click += async (_, _) => await SendAsync(auto: false);
         RealValuesBox.IsCheckedChanged += async (_, _) => { _realValuesOn = RealValuesBox.IsChecked == true; await RefreshValuesAsync(); Rebuild(); };
         LiveBox.IsCheckedChanged += (_, _) => { if (LiveBox.IsChecked == true && _dirty) ScheduleSend(); };
-        DemoBox.IsCheckedChanged += (_, _) => { _drag = Drag.None; Rebuild(); };
+        DemoBox.IsCheckedChanged += (_, _) => { _drag = Drag.None; SyncMode(); Rebuild(); };
+        ModeDesignBtn.Click += (_, _) => { DemoBox.IsChecked = false; SyncMode(); };
+        ModeDemoBtn.Click += (_, _) => { DemoBox.IsChecked = true; SyncMode(); };
+        LiveBox.IsCheckedChanged += (_, _) => UpdateLiveStatus();
+        SyncMode();
         LoadButton.Click += async (_, _) => await LoadFromDeviceAsync();
         OpenFileButton.Click += async (_, _) => await OpenFileAsync();
         SaveFileButton.Click += async (_, _) => await SaveFileAsync();
@@ -479,6 +530,7 @@ public partial class EditorWindow : Window
             if (LiveBox.IsChecked == true) { Log.Info($"Seite {_page + 1} ans Gerät"); _core?.Link.Send(Protocol.Page(_page)); }     // das Display zeigt dieselbe Seite
         };
         AddPageButton.Click += (_, _) => AddPage();
+        TemplateButton.Click += async (_, _) => await AddFromTemplateAsync();
         DeletePageButton.Click += (_, _) => DeletePage();
         // Titel sind ein einfacher Text (gilt in jeder Sprache); mehrsprachig sind nur die eingebauten Texte des Programms und des Geräts
         PageTitleDe.TextChanged += (_, _) => EditPage("pt", p => p.Title = new LText(PageTitleDe.Text ?? "", PageTitleDe.Text ?? ""), listToo: true);
@@ -500,8 +552,11 @@ public partial class EditorWindow : Window
             Page.Rows = rows;
             Changed();
         };
-        AddValueButton.Click += (_, _) => AddTile(isButton: false);
-        AddButtonButton.Click += (_, _) => AddTile(isButton: true);
+        AddValueButton.Click += (_, _) => AddTile("value");
+        AddButtonButton.Click += (_, _) => AddTile("button");
+        AddCalendarButton.Click += (_, _) => AddTile("calendar");
+        AddRadioButton.Click += (_, _) => AddTile("radio");
+        AddChartButton.Click += (_, _) => AddTile("chart");
 
         // Geräteeinstellungen
         LanguageBox.SelectionChanged += (_, _) => EditCfg("lang", c => c.Language = LanguageBox.SelectedIndex == 1 ? "en" : "de");
@@ -522,11 +577,40 @@ public partial class EditorWindow : Window
         IdleMoveBox.ValueChanged += (_, _) => EditCfg("idlem", c => c.Idle.MoveS = IdleMoveBox.Value is { } m ? Math.Max(5, Seconds(m)) : c.Idle.MoveS);
 
         // Kachel-Eigenschaften
+        TypeValueBtn.Click += (_, _) => { if (_sel != null) TypeBox.SelectedIndex = 0; SyncTypeButtons(); };
+        TypeButtonBtn.Click += (_, _) => { if (_sel != null) TypeBox.SelectedIndex = 1; SyncTypeButtons(); };
+        TypeCalBtn.Click += (_, _) => { if (_sel != null) TypeBox.SelectedIndex = 2; SyncTypeButtons(); };
+        TypeRadioBtn.Click += (_, _) => { if (_sel != null) TypeBox.SelectedIndex = 3; SyncTypeButtons(); };
+        TypeChartBtn.Click += (_, _) => { if (_sel != null) TypeBox.SelectedIndex = 4; SyncTypeButtons(); };
+        ModePcBtn.Click += (_, _) => { if (_sel != null) ButtonModeBox.SelectedIndex = 0; SyncTypeButtons(); };
+        ModeHaBtn.Click += (_, _) => { if (_sel != null) ButtonModeBox.SelectedIndex = 1; SyncTypeButtons(); };
+        SpanBox.SelectionChanged += (_, _) => EditTile("span", t => { if (SpanBox.SelectedIndex >= 0) t.Span = SpanSeconds[SpanBox.SelectedIndex]; });
+        VolStepBox.ValueChanged += (_, _) =>
+        {
+            if (_suppress || VolStepBox.Value is not { } v) return;
+            Settings.VolumeStep = Math.Clamp((int)v, 1, 20);
+            Settings.Save();
+        };
+        VolRateBox.ValueChanged += (_, _) =>
+        {
+            if (_suppress || VolRateBox.Value is not { } v) return;
+            Settings.VolumeRate = Math.Clamp((int)v, 1, 10);
+            Settings.Save();
+        };
+        InfoGoButton.Click += (_, _) => ShowPage(_sel?.IsCalendar == true ? 3 : 2);
         TypeBox.SelectionChanged += (_, _) => EditTile("type", t =>
         {
-            t.Type = TypeBox.SelectedIndex switch { 1 => "button", 2 => "calendar", 3 => "radio", _ => "value" };
+            t.Type = TypeBox.SelectedIndex switch { 1 => "button", 2 => "calendar", 3 => "radio", 4 => "chart", _ => "value" };
             if (t.IsButton && t.Format == null) t.Format = "onoff";
             if (t.IsCalendar && t.Icon == null) t.Icon = "calendar";
+            if (t.IsChart)
+            {
+                t.Icon ??= "chart-line";
+                t.Span ??= 120;
+                var cw = Math.Max(t.W, 2);
+                var chh = Math.Max(t.H, 2);
+                if ((cw != t.W || chh != t.H) && ConfigValidator.Fits(Page, t, t.X, t.Y, cw, chh)) { t.W = cw; t.H = chh; }
+            }
             if (t.IsRadio)
             {
                 t.Trigger = "tap";
@@ -625,6 +709,9 @@ public partial class EditorWindow : Window
             await new ActionEditWindow(_core!.Actions, null).ShowDialog<UserAction?>(this);
         };
         DeleteTileButton.Click += (_, _) => DeleteSelected();
+        CopyTileButton.Click += (_, _) => CopySelected(cut: false);
+        CutTileButton.Click += (_, _) => CopySelected(cut: true);
+        PasteButton.Click += (_, _) => PasteTile();
 
         foreach (var box in new[] { XBox, YBox, WBox, HBox })
             box.ValueChanged += (_, _) => EditGeometry();
@@ -666,9 +753,9 @@ public partial class EditorWindow : Window
 
     // ---- Navigation ----------------------------------------------------------------------------
 
-    private static readonly string[] NavKeys = ["nav.display", "nav.actions", "nav.device", "nav.app", "nav.radio"];
-    private static readonly string[] NavIcons = ["monitor-dashboard", "flash", "cellphone-link", "cog", "radio"];
-    private readonly TextBlock[] _navLabels = new TextBlock[5];
+    private static readonly string[] NavKeys = ["nav.start", "nav.display", "nav.content", "nav.connections", "nav.device", "nav.app"];
+    private static readonly string[] NavIcons = ["view-dashboard", "monitor-dashboard", "bookshelf", "connection", "cellphone-link", "cog"];
+    private readonly TextBlock[] _navLabels = new TextBlock[6];
     private bool _navBusy;
 
     private void BuildNav()
@@ -693,11 +780,12 @@ public partial class EditorWindow : Window
         _navBusy = true;
         NavList.SelectedIndex = index;
         _navBusy = false;
-        PageDisplay.IsVisible = index == 0;
-        ActionsPage.IsVisible = index == 1;
-        PageDevice.IsVisible = index == 2;
-        AppPage.IsVisible = index == 3;
-        RadioPage.IsVisible = index == 4;
+        StartPage.IsVisible = index == 0;
+        PageDisplay.IsVisible = index == 1;
+        PageContent.IsVisible = index == 2;
+        ConnectionsPage.IsVisible = index == 3;
+        PageDevice.IsVisible = index == 4;
+        AppPage.IsVisible = index == 5;
     }
 
     /// <summary>Welche Kacheln verwenden diese Aktion? (für die Sperre beim Löschen)</summary>
@@ -727,7 +815,8 @@ public partial class EditorWindow : Window
         ApplyTexts();
         ActionsPage.ApplyTexts();
         RadioPage.ApplyTexts();
-        SetupPage.ApplyTexts();
+        StartPage.ApplyTexts();
+        ConnectionsPage.ApplyTexts();
         FirmwarePage.ApplyTexts();
         AppPage.ApplyTexts();
         Refresh(panels: true);
@@ -744,6 +833,7 @@ public partial class EditorWindow : Window
         DeviceStatusText.Text = text;
         NavConn.Text = connected ? T("Gerät verbunden", "Device connected") : T("Kein Gerät", "No device");
         NavDot.Fill = new SolidColorBrush(Color.Parse(connected ? "#3DDC84" : "#E5484D"));
+        UpdateLiveStatus();
     }
 
     private void OnActionsChanged() => Dispatcher.UIThread.Post(() => UpdateTilePanel());
@@ -898,9 +988,9 @@ public partial class EditorWindow : Window
             var t = _sel;
             TilePanel.IsVisible = t != null;
             NoTileText.IsVisible = t == null;
-            if (t == null) return;
+            if (t == null) { TileHeader.Text = ""; return; }
 
-            TypeBox.SelectedIndex = t.IsButton ? 1 : t.IsCalendar ? 2 : t.IsRadio ? 3 : 0;
+            TypeBox.SelectedIndex = t.IsButton ? 1 : t.IsCalendar ? 2 : t.IsRadio ? 3 : t.IsChart ? 4 : 0;
             TitleDe.Text = t.Title.Get(_cfg.Language);
             IconBox.Text = t.Icon ?? "";
             IconPreview.Text = t.Icon != null ? MdiIcons.Glyph(t.Icon) : "";
@@ -928,7 +1018,19 @@ public partial class EditorWindow : Window
             SourceLabel.Text = t.IsButton && btnHa
                 ? T("Home-Assistant-Entität, die umgeschaltet wird", "Home Assistant entity that is toggled")
                 : T("Home-Assistant-Entität (z. B. sensor.xyz)", "Home Assistant entity (e.g. sensor.xyz)");
-            ButtonModeLabel.IsVisible = ButtonModeBox.IsVisible = t.IsButton;
+            SpanLabel.IsVisible = SpanBox.IsVisible = t.IsChart;
+            SpanBox.SelectedIndex = Math.Max(0, Array.IndexOf(SpanSeconds, t.Span ?? 120));
+            VolumePanel.IsVisible = t.IsButton && t.Action is "pc:volume.up" or "pc:volume.down";
+            VolStepBox.Value = Settings.VolumeStep;
+            VolRateBox.Value = Settings.VolumeRate;
+            ButtonModeLabel.IsVisible = false;
+            ButtonModeCards.IsVisible = t.IsButton;
+            var typeName = t.IsChart ? Strings.Get("ed.type.chart") : t.IsButton ? Strings.Get("ed.type.button") : t.IsCalendar ? Strings.Get("ed.type.cal") : t.IsRadio ? Strings.Get("ed.type.radio") : Strings.Get("ed.type.value");
+            TileHeader.Text = $"{typeName} · {t.W} × {t.H}";
+            TileInfoText.IsVisible = InfoGoButton.IsVisible = t.IsCalendar || t.IsRadio;
+            TileInfoText.Text = Strings.Get(t.IsCalendar ? "ed.info.cal" : "ed.info.radio");
+            InfoGoButton.Content = Strings.Get(t.IsCalendar ? "ed.go.cal" : "ed.go.radio");
+            SyncTypeButtons();
             AdvLightBox.IsVisible = t.IsButton && !btnHa;
             ActionLabel.IsVisible = ActionBox.IsVisible = NewActionButton.IsVisible = t.IsButton && !btnHa;
             ButtonPanel.IsVisible = t.IsButton;
@@ -1142,6 +1244,23 @@ public partial class EditorWindow : Window
         Changed(panels: true);
     }
 
+    /// <summary>Zeigt die Vorlagen und fügt die gewählte Seite hinten an.</summary>
+    public async Task AddFromTemplateAsync()
+    {
+        if (_cfg.Pages.Count >= ConfigValidator.MaxPages)
+        {
+            Status(T("Es sind schon alle Seiten belegt.", "All pages are already used."), error: true);
+            return;
+        }
+        var page = await new TemplatesWindow(_cfg.Language, _cfg.Theme).ShowDialog<PageModel?>(this);
+        if (page == null) return;
+        Touch(null);
+        _cfg.Pages.Add(page);
+        _page = _cfg.Pages.Count - 1;
+        _sel = null;
+        Changed(panels: true);
+    }
+
     private void DeletePage()
     {
         if (_cfg.Pages.Count <= 1) return;
@@ -1152,24 +1271,118 @@ public partial class EditorWindow : Window
         Changed(panels: true);
     }
 
-    private void AddTile(bool isButton)
+    /// <summary>Der Umschalter Gestalten | Vorführen zeigt den Zustand von DemoBox; im Vorführmodus sind Eigenschaften und Palette weg.</summary>
+    private void SyncMode()
     {
-        int w = isButton ? 1 : 2, h = 1;
-        var spot = ConfigValidator.FindFreeSpot(Page, w, h) ?? ConfigValidator.FindFreeSpot(Page, 1, 1);
+        var demo = DemoBox.IsChecked == true;
+        ModeDesignBtn.IsChecked = !demo;
+        ModeDemoBtn.IsChecked = demo;
+        InspectorPanel.IsVisible = !demo;
+        PalettePanel.IsVisible = !demo;
+        if (demo) Status(Strings.Get("ed.demo.hint"));
+    }
+
+    /// <summary>Zeile in der Werkzeugleiste: ob Änderungen sofort aufs Display gehen.</summary>
+    private void UpdateLiveStatus()
+    {
+        var live = LiveBox.IsChecked == true;
+        var connected = _core?.Link.IsConnected == true;
+        LiveDot.Fill = new SolidColorBrush(Color.Parse(live ? (connected ? "#2E9E5B" : "#D9A400") : "#8A8F98"));
+        LiveText.Text = Strings.Get(live ? (connected ? "ed.live.on" : "ed.live.nodev") : "ed.live.off");
+        SendButton.IsVisible = !live;
+    }
+
+    private void SyncTypeButtons()
+    {
+        var t = _sel;
+        TypeValueBtn.IsChecked = t != null && !t.IsButton && !t.IsCalendar && !t.IsRadio && !t.IsChart;
+        TypeChartBtn.IsChecked = t?.IsChart == true;
+        TypeButtonBtn.IsChecked = t?.IsButton == true;
+        TypeCalBtn.IsChecked = t?.IsCalendar == true;
+        TypeRadioBtn.IsChecked = t?.IsRadio == true;
+        ModePcBtn.IsChecked = ButtonModeBox.SelectedIndex != 1;
+        ModeHaBtn.IsChecked = ButtonModeBox.SelectedIndex == 1;
+    }
+
+    private void AddTile(string kind)
+    {
+        // Kalender und Radio brauchen Platz (4 x 2); wo es nicht reicht, so gross wie möglich
+        var (w, h) = kind switch { "button" => (1, 1), "value" => (2, 1), "chart" => (2, 2), _ => (4, 2) };
+        var spot = ConfigValidator.FindFreeSpot(Page, w, h);
+        if (spot == null && kind is "calendar" or "radio" or "chart") { (w, h) = (4, 1); spot = ConfigValidator.FindFreeSpot(Page, w, h); }
+        if (spot == null && kind != "button") { (w, h) = (2, 1); spot = ConfigValidator.FindFreeSpot(Page, w, h); }
+        if (spot == null) { (w, h) = (1, 1); spot = ConfigValidator.FindFreeSpot(Page, w, h); }
         if (spot == null || Page.Tiles.Count >= ConfigValidator.MaxTiles)
         {
             Status(T("Auf dieser Seite ist kein Platz mehr. Zuerst eine Kachel löschen oder eine Reihe hinzufügen.",
                      "No room left on this page. Delete a tile or add a row first."), error: true);
             return;
         }
-        if (spot.Value is var (sx, sy) && !ConfigValidator.Fits(Page, null!, sx, sy, w, h)) w = 1;
         Touch(null);
-        var tile = isButton
-            ? new TileModel { Type = "button", X = spot.Value.X, Y = spot.Value.Y, W = w, H = h, Icon = "star", Title = new LText(T("Neu", "New"), T("Neu", "New")), Trigger = "tap" }
-            : new TileModel { Type = "value", X = spot.Value.X, Y = spot.Value.Y, W = w, H = h, Format = "text", Title = new LText(T("Neu", "New"), T("Neu", "New")) };
+        var neu = new LText(T("Neu", "New"), T("Neu", "New"));
+        var x = spot.Value.X;
+        var y = spot.Value.Y;
+        var tile = kind switch
+        {
+            "button" => new TileModel { Type = "button", X = x, Y = y, W = w, H = h, Icon = "star", Title = neu, Trigger = "tap" },
+            "calendar" => new TileModel { Type = "calendar", X = x, Y = y, W = w, H = h, Icon = "calendar", Title = new LText(T("Kalender", "Calendar"), T("Kalender", "Calendar")) },
+            "chart" => new TileModel { Type = "chart", X = x, Y = y, W = w, H = h, Icon = "chart-line", Title = new LText(T("Verlauf", "Chart"), T("Verlauf", "Chart")), Span = 120 },
+            "radio" => new TileModel { Type = "radio", X = x, Y = y, W = w, H = h, Icon = "radio", Title = new LText("Radio", "Radio"), Trigger = "tap", Action = "pc:radio.toggle" },
+            _ => new TileModel { Type = "value", X = x, Y = y, W = w, H = h, Format = "text", Title = neu },
+        };
         Page.Tiles.Add(tile);
         _sel = tile;
         Changed(panels: true);
+    }
+
+    // ---- Kopieren, Ausschneiden, Einfügen (auch auf eine andere Seite) ------------------------------
+
+    private TileModel? _clip;
+    private bool _clipCut;                    // ausgeschnitten: nach dem Einfügen ist die Zwischenablage leer
+
+    private void UpdatePasteButton()
+    {
+        PasteButton.IsEnabled = _clip != null;
+        PasteButton.Content = _clip == null ? Strings.Get("ed.paste") : Strings.Format("ed.paste.of", _clip.Title.Get(_cfg.Language).Replace('\n', ' ').Trim() is { Length: > 0 } n ? n : Strings.Get("ed.type.button"));
+    }
+
+    private void CopySelected(bool cut)
+    {
+        if (_sel == null) return;
+        _clip = _sel.Clone();
+        _clipCut = cut;
+        UpdatePasteButton();
+        if (cut) DeleteSelected();           // ausgeschnitten: von der Seite nehmen, bleibt in der Zwischenablage
+        Status(Strings.Get(cut ? "ed.clip.cut" : "ed.clip.copied"));
+    }
+
+    /// <summary>Fügt die Kachel aus der Zwischenablage auf der aktuellen Seite ein: an ihrer Stelle, wenn frei, sonst an der ersten freien. Ohne Platz bleibt sie in der Zwischenablage.</summary>
+    private void PasteTile()
+    {
+        if (_clip == null) { Status(Strings.Get("ed.clip.none"), error: true); return; }
+        if (Page.Tiles.Count >= ConfigValidator.MaxTiles)
+        {
+            Status(Strings.Format("ed.clip.nospace", _clip.W, _clip.H), error: true);
+            return;
+        }
+        (int X, int Y)? spot = null;
+        if (ConfigValidator.Fits(Page, null!, _clip.X, _clip.Y, _clip.W, _clip.H)) spot = (_clip.X, _clip.Y);
+        else spot = ConfigValidator.FindFreeSpot(Page, _clip.W, _clip.H);
+        if (spot == null)
+        {
+            Status(Strings.Format("ed.clip.nospace", _clip.W, _clip.H), error: true);
+            return;
+        }
+        Touch(null);
+        var tile = _clip.Clone();
+        tile.X = spot.Value.X;
+        tile.Y = spot.Value.Y;
+        Page.Tiles.Add(tile);
+        _sel = tile;
+        if (_clipCut) { _clip = null; _clipCut = false; }
+        UpdatePasteButton();
+        Changed(panels: true);
+        Status(Strings.Get("ed.clip.pasted"), ok: true);
     }
 
     private void DeleteSelected()
@@ -1235,9 +1448,10 @@ public partial class EditorWindow : Window
         if (_cfg.Pages.Count > 1 && p.Y >= DisplayRenderer.NavY && p.Y <= DisplayRenderer.NavY + DisplayRenderer.NavH)
         {
             var n = _cfg.Pages.Count;
-            var x0 = DisplayRenderer.GridX + (DisplayRenderer.GridW - (n * 220 + (n - 1) * 16)) / 2.0;
-            var index = (int)Math.Floor((p.X - x0) / 236);
-            if (index >= 0 && index < n && p.X - x0 - index * 236 <= 220 && index != _page)
+            var bw = DisplayRenderer.NavButtonWidth(n);
+            var x0 = DisplayRenderer.GridX + (DisplayRenderer.GridW - (n * bw + (n - 1) * 16)) / 2.0;
+            var index = (int)Math.Floor((p.X - x0) / (bw + 16));
+            if (index >= 0 && index < n && p.X - x0 - index * (bw + 16) <= bw && index != _page)
             {
                 _page = index;
                 _sel = null;
@@ -1327,6 +1541,9 @@ public partial class EditorWindow : Window
         if (e.Key == Key.Z && e.KeyModifiers.HasFlag(KeyModifiers.Control) && !inText) { DoUndo(); e.Handled = true; }
         else if (e.Key == Key.Y && e.KeyModifiers.HasFlag(KeyModifiers.Control) && !inText) { DoRedo(); e.Handled = true; }
         else if (e.Key == Key.Delete && !inText && _sel != null) { DeleteSelected(); e.Handled = true; }
+        else if (e.Key == Key.C && e.KeyModifiers.HasFlag(KeyModifiers.Control) && !inText && _sel != null) { CopySelected(cut: false); e.Handled = true; }
+        else if (e.Key == Key.X && e.KeyModifiers.HasFlag(KeyModifiers.Control) && !inText && _sel != null) { CopySelected(cut: true); e.Handled = true; }
+        else if (e.Key == Key.V && e.KeyModifiers.HasFlag(KeyModifiers.Control) && !inText) { PasteTile(); e.Handled = true; }
         else if (e.Key == Key.Escape && _drag != Drag.None)
         {
             _drag = Drag.None; _ghost = null; _moved = false; Rebuild();

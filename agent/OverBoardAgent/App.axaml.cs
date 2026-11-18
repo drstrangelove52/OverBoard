@@ -85,6 +85,7 @@ public partial class App : Application
         _core = new AgentCore(platform, link, new ActionStore());
         link.ConnectionChanged += (_, _) => Dispatcher.UIThread.Post(RefreshTexts);
         _core.StartCalendar();
+        Cli.StartServer(_core);        // nimmt --send und --get von der Kommandozeile an
 
         BuildTray();
         UpdateService.Changed += () => Dispatcher.UIThread.Post(RefreshTexts);
@@ -120,7 +121,7 @@ public partial class App : Application
         _openItem = new NativeMenuItem();
         _openItem.Click += (_, _) => OpenMain();
         _updateItem = new NativeMenuItem { IsVisible = false };
-        _updateItem.Click += (_, _) => OpenMain(3);      // Seite "Programm"
+        _updateItem.Click += (_, _) => OpenMain(5);      // Seite "Programm"
         _autostartItem = new NativeMenuItem { ToggleType = MenuItemToggleType.CheckBox };
         _autostartItem.Click += (_, _) => ToggleAutostart();
         _quitItem = new NativeMenuItem();

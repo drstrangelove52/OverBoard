@@ -57,3 +57,6 @@ public sealed record DeviceInfo(string Device, string Firmware, int Width, int H
     /// <summary>Firmware und Programm sprechen dieselbe Protokollversion.</summary>
     public bool ProtocolMatches => Proto == Protocol.Version;
 }
+
+/// <summary>Verbindungen des Geräts: WLAN, Home Assistant, MQTT.</summary>
+public sealed record DeviceStatus(bool Wifi, bool Ha, bool Mqtt);

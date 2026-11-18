@@ -24,6 +24,12 @@ public sealed class DeviceLink : IDisposable
     public bool IsConnected => _port != null;
     public DeviceInfo? Device { get; private set; }
 
+    /// <summary>Verbindungen des Geräts (WLAN, Home Assistant, MQTT), vom Gerät alle paar Sekunden gemeldet. Null ohne Verbindung.</summary>
+    public DeviceStatus? Status { get; private set; }
+
+    /// <summary>Das Gerät hat einen geänderten Verbindungszustand gemeldet.</summary>
+    public event Action? StatusChanged;
+
     /// <summary>Verbindung steht (true, mit Geräteinfo) oder ist weg (false).</summary>
     public event Action<bool, DeviceInfo?>? ConnectionChanged;
     /// <summary>Das Gerät hat eine Aktion ausgelöst (nur die Kennung).</summary>
@@ -73,7 +79,7 @@ public sealed class DeviceLink : IDisposable
             finally
             {
                 _port = null;
-                Device = null;
+                Device = null; Status = null;
                 try { port.Close(); } catch { /* schon weg */ }
                 port.Dispose();
                 Log.Info("Verbindung beendet");
@@ -227,6 +233,16 @@ public sealed class DeviceLink : IDisposable
                     var ok = root.GetProperty("ok").GetBoolean();
                     var error = root.TryGetProperty("error", out var e) ? e.GetString() : null;
                     _haResult?.TrySetResult((ok, error));
+                    break;
+                }
+                case "status":
+                {
+                    var status = new DeviceStatus(root.GetProperty("wifi").GetBoolean(), root.GetProperty("ha").GetBoolean(), root.GetProperty("mqtt").GetBoolean());
+                    if (Status != status)
+                    {
+                        Status = status;
+                        StatusChanged?.Invoke();
+                    }
                     break;
                 }
                 // "pong" und "hello" brauchen nichts weiter: jede Nachricht zählt als Lebenszeichen
