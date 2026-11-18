@@ -11,6 +11,9 @@ internal static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        // Befehle für die Kommandozeile (prüfen, senden, Listen ...): ohne Fenster, laufen neben dem Programm
+        if (Cli.IsCli(args)) return Task.Run(() => Cli.RunAsync(args)).GetAwaiter().GetResult();   // auf einem Pool-Thread: der Aufruf auf dem UI-Thread würde bei await hängen
+
         // Nur eine Instanz: ein zweiter Start beendet sich sofort
         // (Der Vorschau-Export für die Entwicklung darf neben einem laufenden Agent laufen)
         var export = args.Contains("--export-preview");
