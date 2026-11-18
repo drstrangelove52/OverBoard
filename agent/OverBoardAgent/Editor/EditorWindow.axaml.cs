@@ -1448,10 +1448,11 @@ public partial class EditorWindow : Window
         if (_cfg.Pages.Count > 1 && p.Y >= DisplayRenderer.NavY && p.Y <= DisplayRenderer.NavY + DisplayRenderer.NavH)
         {
             var n = _cfg.Pages.Count;
-            var bw = DisplayRenderer.NavButtonWidth(n);
-            var x0 = DisplayRenderer.GridX + (DisplayRenderer.GridW - (n * bw + (n - 1) * 16)) / 2.0;
-            var index = (int)Math.Floor((p.X - x0) / (bw + 16));
-            if (index >= 0 && index < n && p.X - x0 - index * (bw + 16) <= bw && index != _page)
+            var layout = DisplayRenderer.NavLayout(n, _page);
+            var index = -1;
+            for (var i = 0; i < n; i++)
+                if (p.X >= layout[i].X && p.X <= layout[i].X + layout[i].W) { index = i; break; }
+            if (index >= 0 && index != _page)
             {
                 _page = index;
                 _sel = null;

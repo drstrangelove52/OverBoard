@@ -405,20 +405,41 @@ public static class DisplayRenderer
         new(today.AddDays(6).ToString("yyyy-MM-dd"), "", "Müllabfuhr"),
     ];
 
-    /// <summary>Breite einer Seitentaste: höchstens 220, bei vielen Seiten schmaler, damit alle in die Zeile passen (wie in ui.c).</summary>
-    public static double NavButtonWidth(int pages) => Math.Min(220.0, (GridW - (Math.Max(1, pages) - 1) * 16) / (double)Math.Max(1, pages));
+    /// <summary>
+    /// Lage und Breite der Seitentasten (wie in ui.c): bis 5 Seiten alle gleich breit; ab 6 hat nur die aktive Titel und Symbol,
+    /// die anderen nur das Symbol.
+    /// </summary>
+    public static (double X, double W)[] NavLayout(int n, int active)
+    {
+        var widths = new double[n];
+        if (n < 6)
+            Array.Fill(widths, Math.Min(220.0, (GridW - (n - 1) * 16) / (double)Math.Max(1, n)));
+        else
+        {
+            var other = Math.Min(220.0, (GridW - 220.0 - (n - 1) * 16) / (n - 1));
+            for (var i = 0; i < n; i++) widths[i] = i == active ? 220 : other;
+        }
+        var total = widths.Sum() + (n - 1) * 16;
+        var x = GridX + (GridW - total) / 2.0;
+        var result = new (double X, double W)[n];
+        for (var i = 0; i < n; i++)
+        {
+            result[i] = (x, widths[i]);
+            x += widths[i] + 16;
+        }
+        return result;
+    }
 
     private static void AddNav(Canvas root, ConfigModel cfg, int active, ThemeColors th)
     {
         var n = cfg.Pages.Count;
-        var bw = NavButtonWidth(n);
-        var total = n * bw + (n - 1) * 16;
-        var x = GridX + (GridW - total) / 2.0;
+        var layout = NavLayout(n, active);
         for (var i = 0; i < n; i++)
         {
             var page = cfg.Pages[i];
             var isActive = i == active;
             var fg = isActive ? th.OnAccent : th.Value;
+            var (x, bw) = layout[i];
             var btn = new Border
             {
                 Width = bw, Height = NavH, CornerRadius = new CornerRadius(28), IsHitTestVisible = false,
@@ -430,19 +451,20 @@ public static class DisplayRenderer
             var title = page.Title.Get(cfg.Language);
             var iconSize = Measure(icon, IconFont, 28);
             var titleSize = Measure(title, TextFont, 20);
+            var showTitle = n < 6 || isActive;
             var room = bw - iconSize.Width - 10 - 20;                     // Platz für den Titel (mit etwas Rand)
-            var titleWidth = Math.Min(titleSize.Width, Math.Max(0, room));
-            var startX = (bw - (iconSize.Width + 10 + titleWidth)) / 2;
+            var titleWidth = showTitle ? Math.Min(titleSize.Width, Math.Max(0, room)) : 0;
+            var gap = titleWidth > 8 ? 10 : 0;
+            var startX = (bw - (iconSize.Width + gap + titleWidth)) / 2;
             Put(c, Label(icon, IconFont, 28, fg), startX, (NavH - iconSize.Height) / 2);
             if (titleWidth > 8)
             {
                 var label = Label(title, TextFont, 20, fg);
                 label.Width = titleWidth;
                 label.TextTrimming = TextTrimming.CharacterEllipsis;
-                Put(c, label, startX + iconSize.Width + 10, (NavH - titleSize.Height) / 2);
+                Put(c, label, startX + iconSize.Width + gap, (NavH - titleSize.Height) / 2);
             }
             Put(root, btn, x, NavY);
-            x += bw + 16;
         }
     }
 

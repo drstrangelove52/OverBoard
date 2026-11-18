@@ -462,15 +462,39 @@ static void tile_event(lv_event_t *e)
 
 static int s_cur_page;                     // gerade angezeigte Seite
 
+// Breiten der Seitentasten. Bis 5 Seiten sind alle gleich breit; ab 6 hat nur die aktive Titel und Symbol, die anderen nur das Symbol.
+static void nav_layout(int n, int active, int *w)
+{
+    if (n < 6) {
+        int each = (GRID_W - (n - 1) * 16) / n;
+        if (each > 220) each = 220;
+        for (int i = 0; i < n; i++) w[i] = each;
+        return;
+    }
+    int other = (GRID_W - 220 - (n - 1) * 16) / (n - 1);
+    if (other > 220) other = 220;
+    for (int i = 0; i < n; i++) w[i] = (i == active) ? 220 : other;
+}
+
 static void show_page(int p)
 {
     s_cur_page = p;
+    int nav_w[MAX_PAGES];
+    if (s_n_pages >= 6) nav_layout(s_n_pages, p, nav_w);
     const theme_t *th = theme();
     for (int i = 0; i < s_n_pages; i++) {
         bool act = (i == p);
         if (act) lv_obj_remove_flag(s_pages[i], LV_OBJ_FLAG_HIDDEN);
         else lv_obj_add_flag(s_pages[i], LV_OBJ_FLAG_HIDDEN);
         if (s_nav_btn[i]) {
+            if (s_n_pages >= 6) {                                        // viele Seiten: nur die aktive zeigt ihren Titel
+                lv_obj_set_width(s_nav_btn[i], nav_w[i]);
+                lv_obj_t *lab = lv_obj_get_child(s_nav_btn[i], 1);
+                if (lab) {
+                    if (act) lv_obj_remove_flag(lab, LV_OBJ_FLAG_HIDDEN);
+                    else lv_obj_add_flag(lab, LV_OBJ_FLAG_HIDDEN);
+                }
+            }
             lv_obj_set_style_bg_color(s_nav_btn[i], col(act ? th->accent : th->nav), 0);
             for (int k = 0; k < 2; k++) {
                 lv_obj_t *c = lv_obj_get_child(s_nav_btn[i], k);
@@ -491,7 +515,9 @@ static void style_onoff(tile_t *t, const char *state)
 {
     const theme_t *th = theme();
     bool on = state && !strcmp(state, "on");
-    bool na = !state || !strcmp(state, "unavailable") || !strcmp(state, "unknown");
+    // "nicht verfuegbar" (gedaempftes Symbol) gibt es nur bei Kacheln mit Quelle; eine Taste ohne Quelle sieht immer gleich aus
+    bool has_src = t->cfg->entity && t->cfg->entity[0];
+    bool na = has_src && (!state || !strcmp(state, "unavailable") || !strcmp(state, "unknown"));
     t->st_on = on;
     t->st_na = na;
     lv_obj_set_style_bg_color(t->obj, col(on ? th->tile_on : th->tile), 0);
@@ -1250,8 +1276,9 @@ static void build_main(void)
         for (int p = 0; p < s_n_pages; p++) {
             lv_obj_t *b = lv_button_create(nav);
             s_nav_btn[p] = b;
-            int nav_w = (GRID_W - (s_n_pages - 1) * 16) / s_n_pages;      // bei vielen Seiten schmaler, damit alle in die Zeile passen
-            if (nav_w > 220) nav_w = 220;
+            int widths[MAX_PAGES];
+            nav_layout(s_n_pages, 0, widths);
+            int nav_w = widths[p];
             lv_obj_set_size(b, nav_w, NAV_H);
             lv_obj_set_style_radius(b, 28, 0);
             lv_obj_set_style_shadow_width(b, 0, 0);
@@ -1260,9 +1287,9 @@ static void build_main(void)
             lv_obj_set_style_pad_column(b, 10, 0);
             make_icon(b, cfg->pages[p].icon ? cfg->pages[p].icon : "help-circle", 28, th->value);
             lv_obj_t *nav_label = make_label(b, ob_font(20), th->value, lt(cfg->pages[p].title));
-            if (nav_w < 220) {
+            if (nav_w < 220 || s_n_pages >= 6) {
                 lv_label_set_long_mode(nav_label, LV_LABEL_LONG_DOT);
-                int room = nav_w - 28 - 10 - 20;                              // Symbol, Abstand, Rand
+                int room = (s_n_pages >= 6 ? 220 : nav_w) - 28 - 10 - 20;     // Symbol, Abstand, Rand
                 if (room < 10) room = 10;
                 lv_obj_set_width(nav_label, room);
             }
