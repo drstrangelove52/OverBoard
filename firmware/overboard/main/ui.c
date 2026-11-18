@@ -72,6 +72,8 @@ static uint8_t *s_radio_wip;                  // Logo im Aufbau (wird nur vom US
 static int s_radio_wip_got;
 static lv_image_dsc_t s_radio_dsc;
 
+#define CHART_POINTS 60                       // Punkte der Linie einer Verlaufs-Kachel
+
 #define CAL_ROW_H 30                          // Zeilenhoehe der Kalender-Kachel (gleich wie in der Vorschau des PC-Programms)
 static cal_event_t s_cal[CAL_MAX];            // zuletzt gemeldete Termine (bleiben nach einem Neuaufbau der Oberflaeche)
 static int s_cal_n;
@@ -84,6 +86,9 @@ typedef struct {
     lv_obj_t *r_box, *r_ph, *r_img, *r_station, *r_song, *r_state;   // Radio-Kachel
     int r_logo;
     lv_timer_t *rep_timer;     // Wiederholen bei gedrueckt gehaltener Taste (TRIG_REPEAT)
+    lv_obj_t *chart;           // Verlaufs-Kachel: Linie der letzten Werte
+    lv_chart_series_t *ser;
+    int chart_tick, chart_every;   // Sekunden seit dem letzten Punkt / Sekunden je Punkt
     int avail_w, avail_h;      // Platz fuer den Wert (Anzeige-Kachel)
     lv_timer_t *flash_timer;   // Rueckmeldung nach dem Druecken (Aufleuchten, Fehlerblinken)
     bool st_on, st_na;         // zuletzt bekannter Zustand, zum Wiederherstellen nach dem Aufleuchten
@@ -228,6 +233,9 @@ static void format_value(const tile_cfg_t *c, const char *state, char *out, size
         break;
     case FMT_KWH:
         snprintf(out, n, "%.1f kWh", strtof(state, NULL));
+        break;
+    case FMT_MBIT:
+        snprintf(out, n, "%.1f Mbit/s", strtof(state, NULL));
         break;
     case FMT_PERCENT:
         snprintf(out, n, "%d %%", (int)(strtof(state, NULL) + 0.5f));
@@ -579,7 +587,7 @@ static void apply_state(tile_t *t, const char *state)
         format_value(t->cfg, state, buf, sizeof(buf));
         lv_obj_set_style_text_font(t->value, fit_font(buf, t->avail_w, t->avail_h), 0);
         lv_label_set_text(t->value, buf);
-        lv_obj_align(t->value, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+        lv_obj_align(t->value, t->cfg->type == TILE_CHART ? LV_ALIGN_TOP_RIGHT : LV_ALIGN_BOTTOM_LEFT, 0, 0);
     }
     if (t->cfg->fmt == FMT_ONOFF || t->cfg->type == TILE_BUTTON) style_onoff(t, state);
 }
@@ -805,6 +813,34 @@ static void build_tile(lv_obj_t *page, tile_t *t, int cell_h)
         lv_text_get_size(&ts, lt(c->title), ob_font(narrow ? 14 : 20), 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
         t->avail_h = ph - 2 * PAD - (ts.y + (narrow ? 5 : 8));
         lv_obj_align(t->value, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+    } else if (c->type == TILE_CHART) {
+        bool narrow = pw < 150;
+        t->title = make_label(o, ob_font(narrow ? 14 : 20), th->title, lt(c->title));
+        lv_obj_align(t->title, LV_ALIGN_TOP_LEFT, 0, 0);
+        int top = narrow ? 24 : 38;                                   // Platz fuer Titel und Zahl
+        t->value = make_label(o, ob_font(20), th->value, "-");
+        t->avail_w = (pw - 2 * PAD) * 55 / 100;
+        t->avail_h = top;
+        lv_obj_align(t->value, LV_ALIGN_TOP_RIGHT, 0, 0);
+        t->chart = lv_chart_create(o);
+        lv_obj_set_size(t->chart, pw - 2 * PAD, ph - 2 * PAD - top);
+        lv_obj_align(t->chart, LV_ALIGN_TOP_LEFT, 0, top);
+        lv_chart_set_type(t->chart, LV_CHART_TYPE_LINE);
+        lv_chart_set_point_count(t->chart, CHART_POINTS);
+        lv_obj_set_style_bg_opa(t->chart, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(t->chart, 0, 0);
+        lv_obj_set_style_pad_all(t->chart, 0, 0);
+        lv_obj_set_style_size(t->chart, 0, 0, LV_PART_INDICATOR);      // keine Punkt-Markierungen
+        lv_obj_set_style_line_width(t->chart, 2, LV_PART_ITEMS);
+        lv_obj_set_style_line_color(t->chart, col(th->nav), LV_PART_MAIN);
+        lv_chart_set_div_line_count(t->chart, 3, 0);
+        lv_obj_remove_flag(t->chart, LV_OBJ_FLAG_CLICKABLE);
+        t->ser = lv_chart_add_series(t->chart, col(th->accent), LV_CHART_AXIS_PRIMARY_Y);
+        lv_chart_set_all_values(t->chart, t->ser, LV_CHART_POINT_NONE);
+        lv_chart_set_axis_range(t->chart, LV_CHART_AXIS_PRIMARY_Y, 0, 10000);
+        int every = (int)(c->span_s ? c->span_s : 120) / CHART_POINTS;
+        t->chart_every = every < 1 ? 1 : every;
+        t->chart_tick = t->chart_every;                               // gleich beim ersten Tick einen Punkt setzen
     } else if (c->type == TILE_RADIO) {
         int logo = ph - 2 * PAD;
         if (logo > RADIO_IMG) logo = RADIO_IMG;
@@ -902,8 +938,51 @@ static void collect_entities(void)
 
 // ---- Uhr ------------------------------------------------------------------------------------
 
+// Verlaufs-Kacheln: je Zeitraum/60 Sekunden den zuletzt gemeldeten Wert als Punkt anhaengen
+static void chart_push(tile_t *t)
+{
+    const char *st = cache_get(t->cfg->entity);
+    int32_t v = LV_CHART_POINT_NONE;
+    if (st && st[0] && strcmp(st, "unavailable") && strcmp(st, "unknown")) {
+        char *end = NULL;
+        float f = strtof(st, &end);
+        if (end != st) v = (int32_t)(f * 100.0f);
+    }
+    lv_chart_set_next_value(t->chart, t->ser, v);
+    if (t->cfg->fmt == FMT_PERCENT) {                                  // Prozent: immer 0 bis 100
+        lv_chart_set_axis_range(t->chart, LV_CHART_AXIS_PRIMARY_Y, 0, 10000);
+        return;
+    }
+    // sonst: Bereich aus den Werten der Linie, mit etwas Luft
+    const int32_t *y = lv_chart_get_series_y_array(t->chart, t->ser);
+    int32_t lo = INT32_MAX, hi = INT32_MIN;
+    for (int i = 0; i < CHART_POINTS; i++) {
+        if (y[i] == LV_CHART_POINT_NONE) continue;
+        if (y[i] < lo) lo = y[i];
+        if (y[i] > hi) hi = y[i];
+    }
+    if (lo > hi) return;                                               // noch keine Werte
+    int32_t pad = (hi - lo) / 10;
+    if (pad < 50) pad = 50;
+    if (lo >= 0 && lo - pad < 0) lo = pad;                             // nicht unter 0 zeichnen, wenn es keine negativen Werte gibt
+    lv_chart_set_axis_range(t->chart, LV_CHART_AXIS_PRIMARY_Y, lo - pad, hi + pad);
+}
+
+static void charts_tick(void)
+{
+    for (int i = 0; i < s_n_tiles; i++) {
+        tile_t *t = &s_tiles[i];
+        if (!t->chart || t->cfg->type != TILE_CHART) continue;
+        if (++t->chart_tick >= t->chart_every) {
+            t->chart_tick = 0;
+            chart_push(t);
+        }
+    }
+}
+
 static void clock_tick(lv_timer_t *timer)
 {
+    charts_tick();
     (void)timer;
     time_t now = time(NULL);
     if (now < 1700000000) {              // Zeit noch nicht per SNTP synchron
@@ -1171,14 +1250,22 @@ static void build_main(void)
         for (int p = 0; p < s_n_pages; p++) {
             lv_obj_t *b = lv_button_create(nav);
             s_nav_btn[p] = b;
-            lv_obj_set_size(b, 220, NAV_H);
+            int nav_w = (GRID_W - (s_n_pages - 1) * 16) / s_n_pages;      // bei vielen Seiten schmaler, damit alle in die Zeile passen
+            if (nav_w > 220) nav_w = 220;
+            lv_obj_set_size(b, nav_w, NAV_H);
             lv_obj_set_style_radius(b, 28, 0);
             lv_obj_set_style_shadow_width(b, 0, 0);
             lv_obj_set_flex_flow(b, LV_FLEX_FLOW_ROW);
             lv_obj_set_flex_align(b, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
             lv_obj_set_style_pad_column(b, 10, 0);
             make_icon(b, cfg->pages[p].icon ? cfg->pages[p].icon : "help-circle", 28, th->value);
-            make_label(b, ob_font(20), th->value, lt(cfg->pages[p].title));
+            lv_obj_t *nav_label = make_label(b, ob_font(20), th->value, lt(cfg->pages[p].title));
+            if (nav_w < 220) {
+                lv_label_set_long_mode(nav_label, LV_LABEL_LONG_DOT);
+                int room = nav_w - 28 - 10 - 20;                              // Symbol, Abstand, Rand
+                if (room < 10) room = 10;
+                lv_obj_set_width(nav_label, room);
+            }
             lv_obj_add_event_cb(b, nav_event, LV_EVENT_CLICKED, (void *)(intptr_t)p);
         }
     }
@@ -1215,7 +1302,7 @@ static bool lt_eq(ltext_t a, ltext_t b) { return str_eq(a.de, b.de) && str_eq(a.
 static bool tile_same_look(const tile_cfg_t *a, const tile_cfg_t *b)
 {
     return a->type == b->type && a->w == b->w && a->h == b->h && str_eq(a->entity, b->entity) && lt_eq(a->title, b->title) &&
-           str_eq(a->icon, b->icon) && a->fmt == b->fmt && a->max == b->max && a->trigger == b->trigger && a->hold_ms == b->hold_ms &&
+           str_eq(a->icon, b->icon) && a->fmt == b->fmt && a->max == b->max && a->span_s == b->span_s && a->trigger == b->trigger && a->hold_ms == b->hold_ms &&
            str_eq(a->action, b->action);
 }
 
@@ -1394,6 +1481,13 @@ void ui_set_status(bool wifi, bool ha)
     lv_obj_set_style_text_color(s_st_wifi, col(wifi ? th->ok : th->bad), 0);
     lv_obj_set_style_text_color(s_st_ha, col(ha ? th->ok : th->bad), 0);
     lvgl_port_unlock();
+}
+
+void ui_get_status(bool *wifi, bool *ha, bool *mqtt)
+{
+    *wifi = s_wifi_ok;
+    *ha = s_ha_ok;
+    *mqtt = s_mqtt_ok;
 }
 
 void ui_set_pc_away(bool away)

@@ -19,9 +19,9 @@ static char s_mq_uri[128], s_mq_user[64], s_mq_pass[128];
 
 static void mq_load(void)
 {
-    snprintf(s_mq_uri, sizeof(s_mq_uri), "%s", CONFIG_OB_MQTT_URI);
-    snprintf(s_mq_user, sizeof(s_mq_user), "%s", CONFIG_OB_MQTT_USER);
-    snprintf(s_mq_pass, sizeof(s_mq_pass), "%s", CONFIG_OB_MQTT_PASSWORD);
+    s_mq_uri[0] = 0;
+    s_mq_user[0] = 0;
+    s_mq_pass[0] = 0;
     char u[sizeof(s_mq_uri)];
     if (creds_get("mqtt_uri", u, sizeof(u))) {
         memcpy(s_mq_uri, u, sizeof(u));

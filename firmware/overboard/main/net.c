@@ -20,7 +20,7 @@
 
 static const char *TAG = "net";
 
-// Zugangsdaten: zuerst aus dem Flash (vom PC-Agent uebertragen), sonst die beim Bauen eingestellten
+// Zugangsdaten: kommen ausschliesslich vom PC-Agent und liegen im Flash des Geraets (nichts davon steckt im Programm)
 static char s_ha_uri[128];
 static char s_ha_token[512];
 static char s_wifi_ssid[33];
@@ -29,8 +29,8 @@ static bool s_wifi_owned;      // WLAN-Zugang stammt vom Agent (sonst verbindet 
 
 static void creds_load(void)
 {
-    snprintf(s_ha_uri, sizeof(s_ha_uri), "%s", CONFIG_OB_HA_WS_URI);
-    snprintf(s_ha_token, sizeof(s_ha_token), "%s", CONFIG_OB_HA_TOKEN);
+    s_ha_uri[0] = 0;
+    s_ha_token[0] = 0;
     char u[sizeof(s_ha_uri)], t[sizeof(s_ha_token)];
     if (creds_get("ha_uri", u, sizeof(u)) && creds_get("ha_tok", t, sizeof(t))) {
         memcpy(s_ha_uri, u, sizeof(u));

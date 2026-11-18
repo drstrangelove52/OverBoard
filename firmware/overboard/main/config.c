@@ -124,8 +124,8 @@ void config_free(ob_config_t *cfg)
 // ================================================================================================
 // Namen der Aufzaehlungen
 // ================================================================================================
-static const char *const k_type_names[] = { "value", "button", "calendar", "radio" };
-static const char *const k_fmt_names[] = { "power", "kwh", "status", "onoff", "text", "percent", "time" };
+static const char *const k_type_names[] = { "value", "button", "calendar", "radio", "chart" };
+static const char *const k_fmt_names[] = { "power", "kwh", "status", "onoff", "text", "percent", "time", "mbit" };
 static const char *const k_trig_names[] = { "none", "tap", "hold", "confirm", "repeat" };
 #define COUNT(a) ((int)(sizeof(a) / sizeof((a)[0])))
 
@@ -376,7 +376,7 @@ ob_config_t *config_parse(const char *json, size_t len, char *err, size_t err_le
 
             const cJSON *ty = cJSON_GetObjectItem(tj, "type");
             int type = cJSON_IsString(ty) ? find_name(ty->valuestring, k_type_names, COUNT(k_type_names)) : -1;
-            if (type < 0) FAIL("%s: 'type' muss \"value\", \"button\", \"calendar\" oder \"radio\" sein", where);
+            if (type < 0) FAIL("%s: 'type' muss \"value\", \"button\", \"calendar\", \"radio\" oder \"chart\" sein", where);
             tc->type = (tile_type_t)type;
 
             int x, y, w, h;
@@ -439,6 +439,10 @@ ob_config_t *config_parse(const char *json, size_t len, char *err, size_t err_le
             int hold = 0;
             if (!read_int(tj, "hold_ms", 100, 5000, 0, &hold, where, err, err_len)) goto fail;
             tc->hold_ms = (uint16_t)hold;
+
+            int span = 120;                                // Verlauf: Zeitraum der Linie
+            if (!read_int(tj, "span", 10, 86400, 120, &span, where, err, err_len)) goto fail;
+            tc->span_s = (uint32_t)span;
 
             const cJSON *ac = cJSON_GetObjectItem(tj, "action");
             tc->action = NULL;
@@ -540,6 +544,7 @@ char *config_serialize(const ob_config_t *cfg)
             if (tc->max > 0) cJSON_AddNumberToObject(tj, "max", tc->max);
             if (tc->type == TILE_BUTTON) cJSON_AddStringToObject(tj, "trigger", k_trig_names[tc->trigger]);
             if (tc->hold_ms) cJSON_AddNumberToObject(tj, "hold_ms", tc->hold_ms);
+            if (tc->type == TILE_CHART) cJSON_AddNumberToObject(tj, "span", tc->span_s);
             if (tc->action && tc->action[0]) cJSON_AddStringToObject(tj, "action", tc->action);
             cJSON_AddItemToArray(tiles, tj);
         }

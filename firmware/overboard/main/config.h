@@ -10,8 +10,8 @@
 // (siehe docs/config.md). Es gibt eine eingebaute Standardkonfiguration; eine per USB uebertragene Konfiguration
 // wird im Flash gespeichert und ersetzt sie.
 
-typedef enum { TILE_VALUE, TILE_BUTTON, TILE_CALENDAR, TILE_RADIO } tile_type_t;   // Anzeige-, Button-, Kalender- oder Radio-Kachel
-typedef enum { FMT_POWER, FMT_KWH, FMT_STATUS, FMT_ONOFF, FMT_TEXT, FMT_PERCENT, FMT_TIME } fmt_t;
+typedef enum { TILE_VALUE, TILE_BUTTON, TILE_CALENDAR, TILE_RADIO, TILE_CHART } tile_type_t;   // Anzeige-, Button-, Kalender-, Radio- oder Verlaufs-Kachel
+typedef enum { FMT_POWER, FMT_KWH, FMT_STATUS, FMT_ONOFF, FMT_TEXT, FMT_PERCENT, FMT_TIME, FMT_MBIT } fmt_t;
 typedef enum { TRIG_NONE, TRIG_TAP, TRIG_HOLD, TRIG_CONFIRM, TRIG_REPEAT } trigger_t;   // Tippen, Halten, Tippen mit Rueckfrage, bei gedrueckter Taste wiederholen
 
 typedef struct {
@@ -26,6 +26,7 @@ typedef struct {
     trigger_t trigger;       // nur bei Button-Kacheln
     uint16_t hold_ms;        // Haltedauer bei TRIG_HOLD in ms, 0 = globaler Wert
     const char *action;      // Aktion: NULL = HA-Entitaet umschalten, "pc:<id>" = Aktion auf dem PC (z. B. "pc:volume.up")
+    uint32_t span_s;         // nur Verlauf: Zeitraum der Linie in Sekunden (die Linie hat 60 Punkte)
 } tile_cfg_t;
 
 typedef struct {

@@ -14,10 +14,10 @@ Planung und Entscheidungen stehen im Obsidian-Vault unter `02 Projekte/OverBoard
 ## Bauen
 
 1. ESP-IDF 5.4.x einrichten, Projekt auf einem **lokalen** Laufwerk (nicht Netzlaufwerk).
-2. `overboard/sdkconfig.secrets.example` nach `overboard/sdkconfig.secrets` kopieren und ausfuellen.
-3. `idf.py set-target esp32p4`, dann `idf.py -p COMx build flash`.
+2. `idf.py set-target esp32p4`, dann `idf.py -p COMx build flash`.
 
-Aendert sich `sdkconfig.secrets` oder `sdkconfig.defaults`, die erzeugte `sdkconfig` loeschen (Vollbuild, ca. 10 Minuten).
+Die Firmware enthaelt keine Zugangsdaten: WLAN, Home Assistant und MQTT kommen vom PC-Programm (Seite Geraet, Einrichtung) und liegen nur im Flash des Geraets.
+Aendert sich `sdkconfig.defaults`, die erzeugte `sdkconfig` loeschen (Vollbuild, ca. 10 Minuten).
 
 ## Wichtig zur Hardware
 

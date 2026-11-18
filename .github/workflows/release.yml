@@ -32,7 +32,6 @@ jobs:
         shell: bash
         run: |
           . $IDF_PATH/export.sh
-          touch sdkconfig.secrets            # leer: das fertige Programm enthält keine Zugangsdaten
           idf.py set-target esp32p4
           idf.py -DPROJECT_VER="$VER" build
       - name: Paket zusammenstellen

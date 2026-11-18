@@ -12,6 +12,7 @@ void ui_reload(void);
 
 // Neuen Zustand einer HA-Entitaet anzeigen (thread-safe, darf aus jedem Task aufgerufen werden)
 void ui_set_entity(const char *entity_id, const char *state);
+void ui_get_status(bool *wifi, bool *ha, bool *mqtt);   // Verbindungszustand fuer das PC-Programm
 void ui_press_tile(int page, int idx);   // Vorfuehrmodus des PC-Editors: Kachel wie bei einer Beruehrung ausloesen
 void ui_show_page(int page, bool click);   // click: dabei den Tastenklick abspielen (Vorfuehrmodus)      // Seite anzeigen (der PC-Editor haelt das Geraet auf der Seite, die er gerade bearbeitet)
 

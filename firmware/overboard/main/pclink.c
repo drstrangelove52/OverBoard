@@ -480,13 +480,28 @@ static void on_line_state(int itf, cdcacm_event_t *event)
     if (!s_dtr) set_linked(false);
 }
 
+// Verbindungszustand (WLAN, Home Assistant, MQTT) alle 3 s ans PC-Programm: es zeigt ihn auf seiner Startseite
+static void send_status(void)
+{
+    bool w, h, m;
+    ui_get_status(&w, &h, &m);
+    char line[96];
+    snprintf(line, sizeof(line), "{\"t\":\"status\",\"wifi\":%s,\"ha\":%s,\"mqtt\":%s}", w ? "true" : "false", h ? "true" : "false", m ? "true" : "false");
+    tx_line(line);
+}
+
 static void link_task(void *arg)
 {
     char *line;
+    int64_t last_status_us = 0;
     for (;;) {
         if (xQueueReceive(s_queue, &line, pdMS_TO_TICKS(500)) == pdTRUE) {
             handle_line(line);
             free(line);
+        }
+        if (s_linked && esp_timer_get_time() - last_status_us > 3000000) {
+            last_status_us = esp_timer_get_time();
+            send_status();
         }
         if (s_linked && esp_timer_get_time() - s_last_rx_us > LINK_TIMEOUT_US) {
             ESP_LOGW(TAG, "Keine Nachricht vom PC seit 6 s");
